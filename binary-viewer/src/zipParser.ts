@@ -1,4 +1,4 @@
-import type { BinaryRange } from "./BinaryRange";
+import { BinaryRange } from "./BinaryRange";
 
 
 function readUInt16LE(bytes: Uint8Array, offset: number): number {
@@ -34,12 +34,12 @@ export class ZipParser {
             offset += element.data.length;
         } while (subRanges[subRanges.length - 1].name !== "EndOfCentralDirectory");
 
-        return {
+        return new BinaryRange(
             data,
-            name: "ZipFile",
-            description: "",
+            "ZipFile",
+            "",
             subRanges
-        };
+        );
     }
 
     private static parseEndOfCentralDirectory(entire: Uint8Array, offset: number): BinaryRange {
@@ -50,12 +50,12 @@ export class ZipParser {
 
         if (bytes.length < 22 + commentLength) throw new Error("End of central directory entry too short");
 
-        return {
-            data: entire.subarray(offset, offset + 22 + commentLength),
-            name: "EndOfCentralDirectory",
-            description: "",
-            subRanges: []
-        };
+        return new BinaryRange(
+            entire.subarray(offset, offset + 22 + commentLength),
+            "EndOfCentralDirectory",
+            "",
+            []
+        );
     }
 
     private static parseCentralDirectory(entire: Uint8Array, offset: number): BinaryRange {
@@ -70,12 +70,12 @@ export class ZipParser {
 
         if (bytes.length < entireSize) throw new Error("Central directory entry too short");
 
-        return {
-            data: entire.subarray(offset, offset + entireSize),
-            name: "CentralDirectory",
-            description: "",
-            subRanges: []
-        };
+        return new BinaryRange(
+            entire.subarray(offset, offset + entireSize),
+            "CentralDirectory",
+            "",
+            []
+        );
     }
 
     private static parseFileEntry(entire: Uint8Array, offset: number): BinaryRange {
@@ -91,27 +91,27 @@ export class ZipParser {
         if (bytes.length < entireSize) throw new Error("File entry too short");
 
         const subRanges: BinaryRange[] = [
-            { data: entire.subarray(offset + 0, offset + 4), name: "Signature", description: "", subRanges: [] },
-            { data: entire.subarray(offset + 4, offset + 6), name: "Version", description: "", subRanges: [] },
-            { data: entire.subarray(offset + 6, offset + 8), name: "GeneralPurposeBitFlag", description: "", subRanges: [] },
-            { data: entire.subarray(offset + 8, offset + 10), name: "CompressionMethod", description: "", subRanges: [] },
-            { data: entire.subarray(offset + 10, offset + 12), name: "LastModFileTime", description: "", subRanges: [] },
-            { data: entire.subarray(offset + 12, offset + 14), name: "LastModFileDate", description: "", subRanges: [] },
-            { data: entire.subarray(offset + 14, offset + 18), name: "CRC32", description: "", subRanges: [] },
-            { data: entire.subarray(offset + 18, offset + 22), name: "CompressedSize", description: "", subRanges: [] },
-            { data: entire.subarray(offset + 22, offset + 26), name: "UncompressedSize", description: "", subRanges: [] },
-            { data: entire.subarray(offset + 26, offset + 28), name: "FileNameLength", description: "", subRanges: [] },
-            { data: entire.subarray(offset + 28, offset + 30), name: "ExtraFieldLength", description: "", subRanges: [] },
-            { data: entire.subarray(offset + 30, offset + 30 + nameLength), name: "FileName", description: "", subRanges: [] },
-            { data: entire.subarray(offset + 30 + nameLength, offset + 30 + nameLength + extraFieldLength), name: "ExtraField", description: "", subRanges: [] },
-            { data: entire.subarray(offset + 30 + nameLength + extraFieldLength, offset + entireSize), name: "Contents", description: "", subRanges: [] }
+            new BinaryRange(entire.subarray(offset + 0, offset + 4), "Signature", "", [] ),
+            new BinaryRange(entire.subarray(offset + 4, offset + 6), "Version", "", [] ),
+            new BinaryRange(entire.subarray(offset + 6, offset + 8), "GeneralPurposeBitFlag", "", [] ),
+            new BinaryRange(entire.subarray(offset + 8, offset + 10), "CompressionMethod", "", [] ),
+            new BinaryRange(entire.subarray(offset + 10, offset + 12), "LastModFileTime", "", [] ),
+            new BinaryRange(entire.subarray(offset + 12, offset + 14), "LastModFileDate", "", [] ),
+            new BinaryRange(entire.subarray(offset + 14, offset + 18), "CRC32", "", [] ),
+            new BinaryRange(entire.subarray(offset + 18, offset + 22), "CompressedSize", "", [] ),
+            new BinaryRange(entire.subarray(offset + 22, offset + 26), "UncompressedSize", "", [] ),
+            new BinaryRange(entire.subarray(offset + 26, offset + 28), "FileNameLength", "", [] ),
+            new BinaryRange(entire.subarray(offset + 28, offset + 30), "ExtraFieldLength", "", [] ),
+            new BinaryRange(entire.subarray(offset + 30, offset + 30 + nameLength), "FileName", "", [] ),
+            new BinaryRange(entire.subarray(offset + 30 + nameLength, offset + 30 + nameLength + extraFieldLength), "ExtraField", "", [] ),
+            new BinaryRange(entire.subarray(offset + 30 + nameLength + extraFieldLength, offset + entireSize), "Contents", "", [] )
         ];
 
-        return {
-            data: entire.subarray(offset, offset + entireSize),
-            name: "FileEntry",
-            description: "",
+        return new BinaryRange(
+            entire.subarray(offset, offset + entireSize),
+            "FileEntry",
+            "",
             subRanges
-        };
+        );
     }
 }
