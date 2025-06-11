@@ -11,16 +11,12 @@ export class BinaryRange {
         this.subRanges = subRanges;
     }
 
-    contains(index: number): boolean;
+    contains(offset: number): boolean;
+    contains(offset: number, length: number): boolean;
 
-    contains(startindex: number, endIndex: number = startindex): boolean {
-        return startindex <= endIndex &&
-               startindex >= this.data.byteOffset && 
-               endIndex <= this.data.byteOffset + this.data.length;
+    contains(offset: number, length: number = 1): boolean {
+        return offset >= this.data.byteOffset && 
+               offset + length <= this.data.byteOffset + this.data.length;
     }
 }
 
-// 使用例
-const binaryRange = new BinaryRange(new Uint8Array([1, 2, 3, 4, 5]), "Example", "An example binary range");
-console.log(binaryRange.contains(3)); // true
-console.log(binaryRange.contains(10)); // false

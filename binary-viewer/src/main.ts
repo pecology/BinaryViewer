@@ -70,33 +70,34 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
         }
 
         // クリックしたRangeに対応するTableの方の色付けをしたい
-        let detailsElement = (e.target as HTMLElement).closest("[data-start-index]") as HTMLElement;
+        let detailsElement = (e.target as HTMLElement).closest("[data-offset]") as HTMLElement;
 
-        const startIndex = parseInt(detailsElement.dataset.startIndex!);
-        const endIndex = parseInt(detailsElement.dataset.endIndex!);
-        console.log(`Start: ${startIndex}, End: ${endIndex}`);
-
-        // ハイライト対象のRangeを取得
-        const highlightRangeList: BinaryRange[] = getRangeContainsList(parsed, startIndex, endIndex - 1);
-        highlightRangeList.shift(); // 最初の要素は全体なので削除
-        
-        highlightHexTable([...document.querySelectorAll<HTMLTableCellElement>('#hex-table td')], highlightRangeList);
-        highlightDetails([...document.querySelectorAll<HTMLElement>('#hex-structure details')], highlightRangeList);
-    });
-    
-    document.querySelector<HTMLElement>('#hex-table')!.addEventListener('click', (e) => {
-        // テーブルをクリックしたときも同様に色付けする
-        console.log(e.target);
-        const td = e.target as HTMLTableCellElement;
-        const index = parseInt(td.dataset.index!);
+        const offset = parseInt(detailsElement.dataset.offset!);
+        const length = parseInt(detailsElement.dataset.length!);
 
         // ハイライト対象のRangeを取得
-        const highlightRangeList: BinaryRange[] = getRangeContainsList(parsed, index, index);
+        const highlightRangeList: BinaryRange[] = getRangeContainsList(parsed, offset, length);
         highlightRangeList.shift(); // 最初の要素は全体なので削除
 
         // 色付け処理
-        highlightHexTable([...document.querySelectorAll<HTMLTableCellElement>('#hex-table td')], highlightRangeList);
-        highlightDetails([...document.querySelectorAll<HTMLElement>('#hex-structure details')], highlightRangeList);
+        [...document.querySelectorAll<HTMLTableCellElement>('#hex-table td'),
+        ...document.querySelectorAll<HTMLElement>('#hex-structure details')
+        ].forEach(e => highlight(e, highlightRangeList));
+    });
+
+    document.querySelector<HTMLElement>('#hex-table')!.addEventListener('click', (e) => {
+        // テーブルをクリックしたときも同様に色付けする
+        const td = e.target as HTMLTableCellElement;
+        const offset = parseInt(td.dataset.offset!);
+
+        // ハイライト対象のRangeを取得
+        const highlightRangeList: BinaryRange[] = getRangeContainsList(parsed, offset);
+        highlightRangeList.shift(); // 最初の要素は全体なので削除
+
+        // 色付け処理
+        [...document.querySelectorAll<HTMLTableCellElement>('#hex-table td'),
+        ...document.querySelectorAll<HTMLElement>('#hex-structure details')
+        ].forEach(e => highlight(e, highlightRangeList));
 
         //TODO ファイルコンテンツのパースがうまくいってない
         // バイナリのデータが多いときのページング
@@ -110,47 +111,32 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
         // 2.domのループ　⇒　Rangeのループ
         // どっちが良いのか？　効率は同じだと思うので、どっちでもよいか
 
+        // ハイライト　一回呼び出せばよいようにしたい
+
     });
 });
 
-const getRangeContainsList = (range: BinaryRange, startIndex: number, endIndex: number): BinaryRange[] => {
-    if (startIndex >= range.data.byteOffset && endIndex < range.data.byteOffset + range.data.byteLength) {
-        const sub = range.subRanges.reduce((acc, child) => acc.concat(getRangeContainsList(child, startIndex, endIndex)), [] as BinaryRange[]);
-        return [range, ...sub];
-    }
-    else {
-        return [];
-    }
-}
+const getRangeContainsList = (range: BinaryRange, offset: number, length: number = 1): BinaryRange[] =>
+    range.contains(offset, length)
+        ? range.subRanges.reduce(
+            (acc, child) => [...acc, ...getRangeContainsList(child, offset, length)]
+            , [range]
+        )
+        : [];
 
-const highlightHexTable = (tds: HTMLTableCellElement[], highlightRangeList: BinaryRange[] ) => {
-    tds.forEach(td => {
-        // 現在のハイライトを解除
-        td.dataset.highlight = "0"
 
-        // ハイライト対象のRangeに含まれるかどうかをチェック
-        const index = parseInt(td.dataset.index!);
-        const highlightCount = highlightRangeList.filter(
-            range => range.data.byteOffset <= index &&
-                        range.data.byteOffset + range.data.byteLength > index
-        ).length;
-        // 含むRangeが多いほど色を濃くする
-        td.dataset.highlight = highlightCount.toString();
-    });
-}
+const highlight = (element: HTMLElement, highlightRangeList: BinaryRange[]) => {
+    if (element.dataset.offset === undefined)
+        return;
+    const offset = parseInt(element.dataset.offset!);
 
-const highlightDetails = (detailsList: HTMLElement[], highlightRangeList: BinaryRange[]) => {
-        // 現在のハイライトを解除
-        detailsList.forEach(details => details.dataset.highlight = "0");
+    const length = element.dataset.length !== undefined
+        ? parseInt(element.dataset.length!)
+        : 1;
 
-        highlightRangeList.forEach((range, index) => {
-            const highlightDetails = detailsList.filter(d => d.dataset.startIndex === range.data.byteOffset.toString() &&
-                                                         d.dataset.endIndex === (range.data.byteOffset + range.data.byteLength).toString())
-
-            if (highlightDetails.length > 0) {
-                highlightDetails[0].dataset.highlight = (index + 1).toString();
-            }
-        });
+    const highlightCount = highlightRangeList.filter(range => range.contains(offset, length))
+        .length;
+    element.dataset.highlight = highlightCount.toString();
 }
 
 const byteToString = (byte: number) => byte.toString(16).padStart(2, '0').toUpperCase();
@@ -166,7 +152,7 @@ const toHexTableHtmlString = (hexRange: BinaryRange): string => {
                 </thead>
                     ${chunk(hexRange.data, 16)
             .reduce((acc, r, rowIndex) =>
-                acc + `<tr><th>${byteToString(rowIndex)}</th>${r.reduce((acc2, b, colIndex) => acc2 + `<td data-index="${rowIndex * 16 + colIndex + offset}" data-highlight="0">${byteToString(b)}</td>`, "")}</tr>`, "")}
+                acc + `<tr><th>${byteToString(rowIndex)}</th>${r.reduce((acc2, b, colIndex) => acc2 + `<td data-offset="${rowIndex * 16 + colIndex + offset}" data-highlight="0">${byteToString(b)}</td>`, "")}</tr>`, "")}
             </table>
         `;
 }
@@ -175,7 +161,7 @@ const toStructureHtmlString = (segment: BinaryRange): string => {
     const startIndex = segment.data.byteOffset;
     const endIndex = startIndex + segment.data.byteLength;
     return `
-<details open data-start-index="${startIndex}" data-end-index="${endIndex}" data-highlight="0">
+<details open data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0">
   <summary><span class="cancel-toggle"> ${segment.name} (${byteToString(startIndex)} ～ ${byteToString(endIndex - 1)})</span></summary>
   <div>
     ${segment.subRanges.reduce((acc, child) => acc + toStructureHtmlString(child), "")}
