@@ -99,9 +99,14 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
         ...document.querySelectorAll<HTMLElement>('#hex-structure details')
         ].forEach(e => highlight(e, highlightRangeList));
 
-        //TODO ファイルコンテンツのパースがうまくいってない
-        // バイナリのデータが多いときのページング
+        //TODO 
         // 縦スクロール
+        // バイナリのデータが多いときのページング
+        // トップページ修正
+        //   余計なUI消す
+        //　 zip等、拡張子と対応バイナリが分かるときは、解析ボタン押さずに出したい
+        // ツールチップ出したい
+        // クリックではなく、ホバーでやったほうが良い？色付けはホバーで、クリックで自動スクロールみたいなのもあり
 
     });
 });

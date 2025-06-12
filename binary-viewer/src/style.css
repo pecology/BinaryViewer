@@ -43,6 +43,8 @@ h1 {
   margin: 0 auto;
   padding: 2rem;
   /* text-align: center; */
+  max-height: 600px;
+  overflow-y: scroll;
 }
 
 #hex-table table,th,td {
