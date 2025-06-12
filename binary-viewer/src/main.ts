@@ -100,14 +100,16 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
         ].forEach(e => highlight(e, highlightRangeList));
 
         //TODO 
-        // 縦スクロール
+        // クリックした要素の位置までスクロールする
         // バイナリのデータが多いときのページング
         // トップページ修正
         //   余計なUI消す
         //　 zip等、拡張子と対応バイナリが分かるときは、解析ボタン押さずに出したい
         // ツールチップ出したい
         // クリックではなく、ホバーでやったほうが良い？色付けはホバーで、クリックで自動スクロールみたいなのもあり
-
+        // zipのFile以外の解析を一段深くする
+        // もう一段階深い表示　4バイトの値が何を意味するのか、みたいな表示
+        // 他のバイナリ形式の解析 pngとかやってみる
     });
 });
 
@@ -170,7 +172,7 @@ const rangeToString = (range: BinaryRange): string => {
 
     const startIndex = range.data.byteOffset;
     const endIndex = startIndex + range.data.byteLength;
-    return `${range.name} (${byteToString(startIndex)} ～ ${byteToString(endIndex - 1)})`;
+    return `${byteToString(startIndex)} ～ ${byteToString(endIndex - 1)}`;
 }
 
 
