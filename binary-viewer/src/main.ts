@@ -102,16 +102,6 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
         //TODO ファイルコンテンツのパースがうまくいってない
         // バイナリのデータが多いときのページング
         // 縦スクロール
-        // Rangeからテーブルの要素へ　RangeからStructureの要素を探す関数があってもよいかも
-        // その逆も
-        // Range ⇒　それを含むRangeの階層を取得　⇒　階層毎にハイライト　みたいなのが見通しよさそう
-
-        // ハイライトのやり方として
-        // 1.Rangeのループ　⇒　domのループ
-        // 2.domのループ　⇒　Rangeのループ
-        // どっちが良いのか？　効率は同じだと思うので、どっちでもよいか
-
-        // ハイライト　一回呼び出せばよいようにしたい
 
     });
 });
@@ -158,16 +148,24 @@ const toHexTableHtmlString = (hexRange: BinaryRange): string => {
 }
 
 const toStructureHtmlString = (segment: BinaryRange): string => {
-    const startIndex = segment.data.byteOffset;
-    const endIndex = startIndex + segment.data.byteLength;
     return `
 <details open data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0">
-  <summary><span class="cancel-toggle"> ${segment.name} (${byteToString(startIndex)} ～ ${byteToString(endIndex - 1)})</span></summary>
+  <summary><span class="cancel-toggle"> ${segment.name} (${rangeToString(segment)})</span></summary>
   <div>
     ${segment.subRanges.reduce((acc, child) => acc + toStructureHtmlString(child), "")}
   </div>
 </details>
 `;
+}
+
+const rangeToString = (range: BinaryRange): string => {
+    if (range.data.byteLength === 0) {
+        return "-"
+    }
+
+    const startIndex = range.data.byteOffset;
+    const endIndex = startIndex + range.data.byteLength;
+    return `${range.name} (${byteToString(startIndex)} ～ ${byteToString(endIndex - 1)})`;
 }
 
 
