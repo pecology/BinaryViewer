@@ -1,14 +1,26 @@
+import type { BinaryInterpretType } from "./BinaryInterpretType";
+
 export class BinaryRange {
     data: Uint8Array;
     name: string;
-    description: string;
+    binaryInterpretType: BinaryInterpretType | null;
     subRanges: BinaryRange[];
 
-    constructor(data: Uint8Array, name: string, description: string, subRanges: BinaryRange[] = []) {
+    constructor(data: Uint8Array, name: string, binaryInterpretType: BinaryInterpretType | null, subRanges: BinaryRange[] = []) {
         this.data = data;
         this.name = name;
-        this.description = description;
+        this.binaryInterpretType = binaryInterpretType;
         this.subRanges = subRanges;
+    }
+
+    interpret() {
+        if (this.binaryInterpretType === null)
+        {
+            return "";
+        } else
+        {
+            return `${this.binaryInterpretType.interpret(this.data)} (${this.binaryInterpretType.toString()})`;
+        }
     }
 
     contains(offset: number): boolean;

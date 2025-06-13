@@ -154,6 +154,7 @@ const toStructureHtmlString = (segment: BinaryRange): string => {
   <summary><span class="cancel-toggle"> ${segment.name} (${rangeToString(segment)})</span></summary>
   <div>
     ${segment.subRanges.reduce((acc, child) => acc + toStructureHtmlString(child), "")}
+    ${segment.interpret()}
   </div>
 </details>
 `;
@@ -168,7 +169,3 @@ const rangeToString = (range: BinaryRange): string => {
     const endIndex = startIndex + range.data.byteLength;
     return `${byteToString(startIndex)} ～ ${byteToString(endIndex - 1)}`;
 }
-
-
-
-setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)

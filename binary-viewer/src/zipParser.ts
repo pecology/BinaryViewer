@@ -1,4 +1,5 @@
 import { BinaryRange } from "./BinaryRange";
+import { Ascii, Int16LE, Int32LE, ShiftJis, ZipDate, ZipGeneralPurposeBitFlag, ZipSignature, ZipTime } from "./BinaryInterpretType";
 
 
 function readUInt16LE(bytes: Uint8Array, offset: number): number {
@@ -37,7 +38,7 @@ export class ZipParser {
         return new BinaryRange(
             data,
             "ZipFile",
-            "",
+            null,
             subRanges
         );
     }
@@ -53,7 +54,7 @@ export class ZipParser {
         return new BinaryRange(
             entire.subarray(offset, offset + 22 + commentLength),
             "EndOfCentralDirectory",
-            "",
+            null,
             []
         );
     }
@@ -73,7 +74,7 @@ export class ZipParser {
         return new BinaryRange(
             entire.subarray(offset, offset + entireSize),
             "CentralDirectory",
-            "",
+            null,
             []
         );
     }
@@ -91,26 +92,26 @@ export class ZipParser {
         if (bytes.length < entireSize) throw new Error("File entry too short");
 
         const subRanges: BinaryRange[] = [
-            new BinaryRange(entire.subarray(offset + 0, offset + 4), "Signature", "", [] ),
-            new BinaryRange(entire.subarray(offset + 4, offset + 6), "Version", "", [] ),
-            new BinaryRange(entire.subarray(offset + 6, offset + 8), "GeneralPurposeBitFlag", "", [] ),
-            new BinaryRange(entire.subarray(offset + 8, offset + 10), "CompressionMethod", "", [] ),
-            new BinaryRange(entire.subarray(offset + 10, offset + 12), "LastModFileTime", "", [] ),
-            new BinaryRange(entire.subarray(offset + 12, offset + 14), "LastModFileDate", "", [] ),
-            new BinaryRange(entire.subarray(offset + 14, offset + 18), "CRC32", "", [] ),
-            new BinaryRange(entire.subarray(offset + 18, offset + 22), "CompressedSize", "", [] ),
-            new BinaryRange(entire.subarray(offset + 22, offset + 26), "UncompressedSize", "", [] ),
-            new BinaryRange(entire.subarray(offset + 26, offset + 28), "FileNameLength", "", [] ),
-            new BinaryRange(entire.subarray(offset + 28, offset + 30), "ExtraFieldLength", "", [] ),
-            new BinaryRange(entire.subarray(offset + 30, offset + 30 + nameLength), "FileName", "", [] ),
-            new BinaryRange(entire.subarray(offset + 30 + nameLength, offset + 30 + nameLength + extraFieldLength), "ExtraField", "", [] ),
-            new BinaryRange(entire.subarray(offset + 30 + nameLength + extraFieldLength, offset + entireSize), "Contents", "", [] )
+            new BinaryRange(entire.subarray(offset + 0, offset + 4), "Signature", new ZipSignature(), [] ),
+            new BinaryRange(entire.subarray(offset + 4, offset + 6), "Version", new Int16LE(), [] ),
+            new BinaryRange(entire.subarray(offset + 6, offset + 8), "GeneralPurposeBitFlag", new ZipGeneralPurposeBitFlag(), [] ),
+            new BinaryRange(entire.subarray(offset + 8, offset + 10), "CompressionMethod", new Int16LE(), [] ),
+            new BinaryRange(entire.subarray(offset + 10, offset + 12), "LastModFileTime", new ZipTime(), [] ),
+            new BinaryRange(entire.subarray(offset + 12, offset + 14), "LastModFileDate", new ZipDate(), [] ),
+            new BinaryRange(entire.subarray(offset + 14, offset + 18), "CRC32", new Int32LE(), [] ),
+            new BinaryRange(entire.subarray(offset + 18, offset + 22), "CompressedSize", new Int32LE(), [] ),
+            new BinaryRange(entire.subarray(offset + 22, offset + 26), "UncompressedSize", new Int32LE(), [] ),
+            new BinaryRange(entire.subarray(offset + 26, offset + 28), "FileNameLength", new Int16LE(), [] ),
+            new BinaryRange(entire.subarray(offset + 28, offset + 30), "ExtraFieldLength", new Int16LE(), [] ),
+            new BinaryRange(entire.subarray(offset + 30, offset + 30 + nameLength), "FileName", new ShiftJis(), [] ),
+            new BinaryRange(entire.subarray(offset + 30 + nameLength, offset + 30 + nameLength + extraFieldLength), "ExtraField", null, [] ),
+            new BinaryRange(entire.subarray(offset + 30 + nameLength + extraFieldLength, offset + entireSize), "Contents", null, [] )
         ];
 
         return new BinaryRange(
             entire.subarray(offset, offset + entireSize),
             "FileEntry",
-            "",
+            null,
             subRanges
         );
     }
