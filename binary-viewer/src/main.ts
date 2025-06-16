@@ -1,7 +1,4 @@
 import './style.css'
-import typescriptLogo from './typescript.svg'
-import viteLogo from '/vite.svg'
-import { setupCounter } from './counter.ts'
 import { ZipParser } from './zipParser.ts'
 import type { BinaryRange } from './BinaryRange.ts'
 
@@ -27,7 +24,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <button id="load-button">Load File</button>
   </div>
   <div id="output">
-    <div id="hex-table" class="col">
+    <div id="left" class = "col">
+        <div id="hex-table-control">
+        </div>
+        <div id="hex-table">
+        </div>
     </div>
     <div id="hex-structure" class="col">
     </div>
@@ -37,15 +38,34 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('click', async () => {
     const fileInput = document.querySelector<HTMLInputElement>('#fileInput')!;
     const data = await fileInput.files![0]?.arrayBuffer();
-    const parsed = ZipParser.parse(new Uint8Array(data));
-    console.log(parsed);
-    const hexTableHtml = toHexTableHtmlString(parsed);
+    const parseResult = ZipParser.parse(new Uint8Array(data));
+    
+    
+    const pagingControl = 
+    `
+    <label for="paging-index-input">Offset</label>
+    <input type="number" id="paging-index-input" value="0" min="0" max="${parseResult.data.byteLength / 1024}"></input>
+    <span id="display-range-text">(0 ~ 1023byte)</span>
+    `
+    document.querySelector<HTMLDivElement>('#hex-table-control')!.innerHTML = pagingControl;
+    document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(parseResult);
 
-    document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = hexTableHtml;
-    document.querySelector<HTMLDivElement>('#hex-structure')!.innerHTML = toStructureHtmlString(parsed);
+    document.querySelector<HTMLDivElement>('#hex-structure')!.innerHTML = toStructureHtmlString(parseResult);
 
     document.querySelector<HTMLElement>('#hex-structure > details')!.addEventListener('mouseover', (e) => {
 
+    });
+
+    document.querySelector<HTMLElement>('#paging-index-input')!.addEventListener('input', (e) => {
+        const pagingIndex = parseInt((e.target as HTMLInputElement).value);
+        if (isNaN(pagingIndex))
+        {
+            return;
+        }
+
+        document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(parseResult, pagingIndex);
+
+        document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${pagingIndex * 1024} ~ ${(pagingIndex + 1) * 1024 -1}byte)`
     });
 
     document.querySelector<HTMLElement>('#hex-structure > details')!.addEventListener('click', (e) => {
@@ -61,8 +81,17 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
         const offset = parseInt(detailsElement.dataset.offset!);
         const length = parseInt(detailsElement.dataset.length!);
 
+        const nowPagingIndex = parseInt((document.querySelector("#paging-index-input") as HTMLInputElement).value);
+        const clickedElementIndex = Math.floor(offset / 1024);
+        if (nowPagingIndex !== clickedElementIndex)
+        {
+            document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(parseResult, clickedElementIndex);
+            document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${clickedElementIndex * 1024} ~ ${(clickedElementIndex + 1) * 1024 -1}byte)`
+            document.querySelector<HTMLInputElement>('#paging-index-input')!.value = clickedElementIndex.toString();
+        }
+
         // ハイライト対象のRangeを取得
-        const highlightRangeList: BinaryRange[] = getRangeContainsList(parsed, offset, length);
+        const highlightRangeList: BinaryRange[] = getRangeContainsList(parseResult, offset, length);
         highlightRangeList.shift(); // 最初の要素は全体なので削除
 
         // 色付け処理
@@ -86,7 +115,7 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
         const offset = parseInt(td.dataset.offset!);
 
         // ハイライト対象のRangeを取得
-        const highlightRangeList: BinaryRange[] = getRangeContainsList(parsed, offset);
+        const highlightRangeList: BinaryRange[] = getRangeContainsList(parseResult, offset);
         highlightRangeList.shift(); // 最初の要素は全体なので削除
 
         // 色付け処理
@@ -131,8 +160,9 @@ const highlight = (element: HTMLElement, highlightRangeList: BinaryRange[]) => {
 }
 
 const byteToString = (byte: number) => byte.toString(16).padStart(2, '0').toUpperCase();
-const toHexTableHtmlString = (hexRange: BinaryRange): string => {
-    const offset = hexRange.data.byteOffset;
+const toHexTableHtmlString = (hexRange: BinaryRange, pageIndex: number = 0): string => {
+    const displayArray = hexRange.data.subarray(pageIndex * 1024, (pageIndex + 1) * 1024);
+    const offset = hexRange.data.byteOffset + (pageIndex * 1024);
     return `
             <table class="table table-sm table-bordered">
                 <thead>
@@ -141,9 +171,21 @@ const toHexTableHtmlString = (hexRange: BinaryRange): string => {
                         ${[...Array(16)].map((_, i) => i).reduce((acc, b) => acc + `<th>${byteToString(b)}</th>`, "")}
                     </tr>
                 </thead>
-                    ${chunk(hexRange.data, 16)
-            .reduce((acc, r, rowIndex) =>
-                acc + `<tr><th>${byteToString(rowIndex)}</th>${r.reduce((acc2, b, colIndex) => acc2 + `<td data-offset="${rowIndex * 16 + colIndex + offset}" data-highlight="0">${byteToString(b)}</td>`, "")}</tr>`, "")}
+                    ${
+                        chunk(displayArray, 16)
+                            .reduce((acc, r, rowIndex) =>
+                                acc + `<tr>
+                                            <th>
+                                                ${byteToString(rowIndex + (pageIndex * 1024 / 16))}
+                                            </th>
+                                                ${r.reduce((acc2, b, colIndex) => 
+                                                    acc2 + `<td data-offset="${rowIndex * 16 + colIndex + offset}" 
+                                                                data-highlight="0">
+                                                                ${byteToString(b)}
+                                                            </td>`, "")}
+                                        </tr>`,
+                                "")
+                    }
             </table>
         `;
 }
