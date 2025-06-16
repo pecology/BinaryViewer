@@ -20,26 +20,30 @@ function chunk<T>(source: Iterable<T>, chunkSize: number): T[][] {
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="input">
-    <input type="file" id="fileInput" />
-    <button id="load-button">Load File</button>
-  </div>
-  <div id="output">
-    <div id="left" class = "col">
-        <div id="hex-table-control">
-        </div>
-        <div id="hex-table">
-        </div>
-    </div>
-    <div id="hex-structure" class="col">
+    <div>
+        <input type="file" id="fileInput" />
+        <button id="load-button">Load File</button>
     </div>
   </div>
-`
+`;
 
 document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('click', async () => {
     const fileInput = document.querySelector<HTMLInputElement>('#fileInput')!;
     const data = await fileInput.files![0]?.arrayBuffer();
     const parseResult = ZipParser.parse(new Uint8Array(data));
     
+    // document.querySelector<HTMLDivElement>('#app')!.insertAdjacentHTML("beforeend",`
+    document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
+        <div id="output">
+            <div id="left" class = "col">
+                <div id="hex-table-control">
+                </div>
+                <div id="hex-table">
+                </div>
+            </div>
+            <div id="hex-structure" class="col">
+            </div>
+        </div>`;
     
     const pagingControl = 
     `

@@ -1,5 +1,6 @@
 {
     "[typescript]": {
         "editor.detectIndentation": false
-    }
+    },
+    "files.encoding": "utf8"
 }
