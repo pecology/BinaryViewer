@@ -42,6 +42,8 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
                 </div>
             </div>
             <div id="hex-structure" class="col">
+                <div class="details-wrapper">
+                </div>
             </div>
         </div>`;
     
@@ -54,11 +56,7 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
     document.querySelector<HTMLDivElement>('#hex-table-control')!.innerHTML = pagingControl;
     document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(parseResult);
 
-    document.querySelector<HTMLDivElement>('#hex-structure')!.innerHTML = toStructureHtmlString(parseResult);
-
-    document.querySelector<HTMLElement>('#hex-structure > details')!.addEventListener('mouseover', (e) => {
-
-    });
+    document.querySelector<HTMLDivElement>('.details-wrapper')!.innerHTML = toStructureHtmlString(parseResult);
 
     document.querySelector<HTMLElement>('#paging-index-input')!.addEventListener('input', (e) => {
         const pagingIndex = parseInt((e.target as HTMLInputElement).value);
@@ -72,7 +70,7 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
         document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${pagingIndex * 1024} ~ ${(pagingIndex + 1) * 1024 -1}byte)`
     });
 
-    document.querySelector<HTMLElement>('#hex-structure > details')!.addEventListener('click', (e) => {
+    document.querySelector<HTMLElement>('.details-wrapper > details')!.addEventListener('click', (e) => {
         console.log(e.target);
         if ((e.target as HTMLElement).classList.contains("cancel-toggle")) {
             // detailsの開閉の動作をキャンセルしたい
@@ -100,7 +98,7 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
 
         // 色付け処理
         [...document.querySelectorAll<HTMLTableCellElement>('#hex-table td'),
-        ...document.querySelectorAll<HTMLElement>('#hex-structure details')
+        ...document.querySelectorAll<HTMLElement>('.details-wrapper details')
         ].forEach(e => highlight(e, highlightRangeList));
 
         // クリックした構造に対応する箇所に、テーブルのスクロールを合わせる
@@ -124,11 +122,11 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
 
         // 色付け処理
         [...document.querySelectorAll<HTMLTableCellElement>('#hex-table td'),
-        ...document.querySelectorAll<HTMLElement>('#hex-structure details')
+        ...document.querySelectorAll<HTMLElement>('.details-wrapper details')
         ].forEach(e => highlight(e, highlightRangeList));
 
         // クリックした構造に対応する箇所に、テーブルのスクロールを合わせる
-        [...document.querySelectorAll<HTMLElement>('#hex-structure details')]
+        [...document.querySelectorAll<HTMLElement>('.details-wrapper details')]
             .reduce((acc, details) => parseInt(details.dataset.highlight!) >= parseInt(acc.dataset.highlight!) ? details : acc)
             .scrollIntoView(
                 {
@@ -168,11 +166,12 @@ const toHexTableHtmlString = (hexRange: BinaryRange, pageIndex: number = 0): str
     const displayArray = hexRange.data.subarray(pageIndex * 1024, (pageIndex + 1) * 1024);
     const offset = hexRange.data.byteOffset + (pageIndex * 1024);
     return `
+            <div class="table-wrapper">
             <table class="table table-sm table-bordered">
                 <thead>
                     <tr>
                         <th>Pos</th>
-                        ${[...Array(16)].map((_, i) => i).reduce((acc, b) => acc + `<th>${byteToString(b)}</th>`, "")}
+                        ${[...Array(16)].map((_, i) => i).reduce((acc, b) => acc + `<th>${b.toString(16).toUpperCase()}</th>`, "")}
                     </tr>
                 </thead>
                     ${
@@ -180,7 +179,7 @@ const toHexTableHtmlString = (hexRange: BinaryRange, pageIndex: number = 0): str
                             .reduce((acc, r, rowIndex) =>
                                 acc + `<tr>
                                             <th>
-                                                ${byteToString(rowIndex + (pageIndex * 1024 / 16))}
+                                                ${(rowIndex + (pageIndex * 1024 / 16)).toString(16).toUpperCase()}
                                             </th>
                                                 ${r.reduce((acc2, b, colIndex) => 
                                                     acc2 + `<td data-offset="${rowIndex * 16 + colIndex + offset}" 
@@ -191,6 +190,7 @@ const toHexTableHtmlString = (hexRange: BinaryRange, pageIndex: number = 0): str
                                 "")
                     }
             </table>
+            </div>
         `;
 }
 
