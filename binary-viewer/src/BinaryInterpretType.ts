@@ -31,6 +31,21 @@ export class Int32LE implements BinaryInterpretType {
     }
 }
 
+
+export class Int32LEHex implements BinaryInterpretType {
+    toString(): string {
+        return "Int32LE Hex";
+    }
+
+    interpret(bytes: Uint8Array): string {
+        if (bytes.length < 4) {
+            throw new Error("Insufficient bytes for Int32LE");
+        }
+        const value = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getInt32(0, true);
+        return value.toString(16);
+    }
+}
+
 export class Ascii implements BinaryInterpretType {
     toString(): string {
         return "Ascii";
