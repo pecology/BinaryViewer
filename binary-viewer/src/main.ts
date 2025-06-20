@@ -70,6 +70,66 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
         document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${pagingIndex * 1024} ~ ${(pagingIndex + 1) * 1024 -1}byte)`
     });
 
+    document.querySelector<HTMLElement>('.details-wrapper > details')!.addEventListener('keydown', (e) => {
+        // キーボードの矢印キーで、detailsの開閉や移動を行う
+        const detailsElement = (e.target as HTMLElement).closest("[data-offset]") as HTMLDetailsElement;
+        if (e.key === "ArrowRight" )
+        {
+            detailsElement.open = true;
+        }
+        else if (e.key === "ArrowLeft")
+        {
+            if (detailsElement.open)
+            {
+                detailsElement.open = false;
+            } else {
+                const parentDetails = detailsElement.parentElement as HTMLDetailsElement;
+                if (parentDetails && parentDetails.tagName === "DETAILS") {
+                    parentDetails.querySelector("summary")?.focus();
+                    parentDetails.click();
+                }
+            }
+        }
+        else if (e.key === "ArrowDown")
+        {
+            e.preventDefault();
+
+            let next = detailsElement.open && detailsElement.querySelector<HTMLDetailsElement>('details')
+                ? detailsElement.querySelector<HTMLDetailsElement>('details')
+                : detailsElement.nextElementSibling as HTMLDetailsElement;
+
+            if (next === null) {
+                // 次の要素がない場合は、親の次の要素を探す
+                next = detailsElement.parentElement?.nextElementSibling as HTMLDetailsElement;
+            }
+
+            if (next !== null) {
+                next.querySelector("summary")?.focus();
+                next.click();
+            }
+        }
+        else if (e.key === "ArrowUp")
+        {
+            e.preventDefault();
+
+            let prev = detailsElement.previousElementSibling as HTMLDetailsElement;
+
+            if (prev === null || prev.tagName !== "DETAILS") {
+                // 前の要素がない場合は、親の次の要素を探す
+                prev = detailsElement.parentElement as HTMLDetailsElement;
+            }
+
+            if (prev !== null) {
+                prev.querySelector("summary")?.focus();
+                prev.click();
+            }
+        }
+
+        // TODO同じように各矢印のキーイベントを自然に実装する
+    });
+
+
+
     document.querySelector<HTMLElement>('.details-wrapper > details')!.addEventListener('click', (e) => {
         console.log(e.target);
         if ((e.target as HTMLElement).classList.contains("cancel-toggle")) {
@@ -196,12 +256,10 @@ const toHexTableHtmlString = (hexRange: BinaryRange, pageIndex: number = 0): str
 
 const toStructureHtmlString = (segment: BinaryRange): string => {
     return `
-<details open data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0">
+<details data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0">
   <summary><span class="cancel-toggle"> ${segment.name} (${rangeToString(segment)})</span></summary>
-  <div>
     ${segment.subRanges.reduce((acc, child) => acc + toStructureHtmlString(child), "")}
     ${segment.interpret()}
-  </div>
 </details>
 `;
 }

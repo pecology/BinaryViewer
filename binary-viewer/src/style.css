@@ -74,7 +74,7 @@ h1 {
   border:1px solid
 }
 
-details > div {
+details > details {
     margin-left: 1rem;
 }
 
