@@ -46,23 +46,49 @@ export class Int32LEHex implements BinaryInterpretType {
     }
 }
 
-export class Ascii implements BinaryInterpretType {
-    toString(): string {
-        return "Ascii";
+export class CharEncoding implements BinaryInterpretType {
+    private encoding: string;
+    constructor(encoding: string) {
+        this.encoding = encoding;
     }
-
+    toString(): string {
+        // 表示用に大文字化や特別な表記も可能
+        switch (this.encoding.toLowerCase()) {
+            case "ascii": return "Ascii";
+            case "sjis": return "ShiftJis";
+            case "utf-8": return "UTF-8";
+            default: return this.encoding;
+        }
+    }
     interpret(bytes: Uint8Array): string {
-        return new TextDecoder("ascii").decode(bytes);
+        const decoded = new TextDecoder(this.encoding).decode(bytes);
+        // 不可視文字を可視化
+        return decoded
+            .replace(/ /g, "(half space)")
+            .replace(/\t/g, "(tab)")
+            .replace(/\r/g, "(CR)")
+            .replace(/\n/g, "(LF)");
     }
 }
 
-export class ShiftJis implements BinaryInterpretType {
-    toString(): string {
-        return "ShiftJis";
+export class TextEncoding implements BinaryInterpretType {
+    private encoding: string;
+    constructor(encoding: string) {
+        this.encoding = encoding;
     }
-
+    toString(): string {
+        // 表示用に大文字化や特別な表記も可能
+        switch (this.encoding.toLowerCase()) {
+            case "ascii": return "Ascii";
+            case "sjis": return "ShiftJis";
+            case "utf-8": return "UTF-8";
+            default: return this.encoding;
+        }
+    }
     interpret(bytes: Uint8Array): string {
-        return new TextDecoder("sjis").decode(bytes);
+        const decoded = new TextDecoder(this.encoding).decode(bytes);
+        // 不可視文字を可視化
+        return decoded;
     }
 }
 

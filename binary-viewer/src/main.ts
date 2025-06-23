@@ -1,6 +1,7 @@
 import './style.css'
 import { ZipParser } from './zipParser.ts'
 import type { BinaryRange } from './BinaryRange.ts'
+import { TextParser } from './textParser.ts';
 
 function chunk<T>(source: Iterable<T>, chunkSize: number): T[][] {
     const result: T[][] = [];
@@ -30,7 +31,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('click', async () => {
     const fileInput = document.querySelector<HTMLInputElement>('#fileInput')!;
     const data = await fileInput.files![0]?.arrayBuffer();
-    const parseResult = ZipParser.parse(new Uint8Array(data));
+    const parseResult = TextParser.parse(new Uint8Array(data));
     
     // document.querySelector<HTMLDivElement>('#app')!.insertAdjacentHTML("beforeend",`
     document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -258,8 +259,8 @@ const toStructureHtmlString = (segment: BinaryRange): string => {
     return `
 <details data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0">
   <summary><span class="cancel-toggle"> ${segment.name} (${rangeToString(segment)})</span></summary>
-    ${segment.subRanges.reduce((acc, child) => acc + toStructureHtmlString(child), "")}
     ${segment.interpret()}
+    ${segment.subRanges.reduce((acc, child) => acc + toStructureHtmlString(child), "")}
 </details>
 `;
 }

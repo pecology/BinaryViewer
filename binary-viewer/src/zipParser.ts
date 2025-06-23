@@ -1,5 +1,5 @@
 import { BinaryRange } from "./BinaryRange";
-import { Ascii, Int16LE, Int32LE, Int32LEHex, ShiftJis, ZipDate, ZipGeneralPurposeBitFlag, ZipSignature, ZipTime } from "./BinaryInterpretType";
+import { CharEncoding, Int16LE, Int32LE, Int32LEHex, ZipDate, ZipGeneralPurposeBitFlag, ZipSignature, ZipTime } from "./BinaryInterpretType";
 
 
 function readUInt16LE(bytes: Uint8Array, offset: number): number {
@@ -60,7 +60,7 @@ export class ZipParser {
             new BinaryRange(entire.subarray(offset + 12, offset + 16), "SizeOfCentralDirectory", new Int32LE(), []),
             new BinaryRange(entire.subarray(offset + 16, offset + 20), "OffsetOfStartOfCentralDirectory", new Int32LEHex(), []),
             new BinaryRange(entire.subarray(offset + 20, offset + 22), "CommentLength", new Int16LE(), []),
-            new BinaryRange(entire.subarray(offset + 22, offset + 22 + commentLength), "Comment", new ShiftJis(), []),
+            new BinaryRange(entire.subarray(offset + 22, offset + 22 + commentLength), "Comment", new CharEncoding("sjis"), []),
         ];
         return new BinaryRange(
             entire.subarray(offset, offset + 22 + commentLength),
@@ -101,7 +101,7 @@ export class ZipParser {
             new BinaryRange(entire.subarray(offset + 38, offset + 42), "ExternalFileAttributes", new Int32LE(), []),
             new BinaryRange(entire.subarray(offset + 42, offset + 46), "RelativeOffsetOfLocalHeader", new Int32LEHex(), []),
             // 可変長フィールド
-            new BinaryRange(entire.subarray(offset + 46, offset + 46 + nameLength), "FileName", new ShiftJis(), []),
+            new BinaryRange(entire.subarray(offset + 46, offset + 46 + nameLength), "FileName", new CharEncoding("sjis"), []),
             new BinaryRange(entire.subarray(offset + 46 + nameLength, offset + 46 + nameLength + extraFieldLength), "ExtraField", null, []),
             new BinaryRange(entire.subarray(offset + 46 + nameLength + extraFieldLength, offset + 46 + nameLength + extraFieldLength + commentLength), "FileComment", null, []),
         ];
@@ -138,7 +138,7 @@ export class ZipParser {
             new BinaryRange(entire.subarray(offset + 22, offset + 26), "UncompressedSize", new Int32LE(), [] ),
             new BinaryRange(entire.subarray(offset + 26, offset + 28), "FileNameLength", new Int16LE(), [] ),
             new BinaryRange(entire.subarray(offset + 28, offset + 30), "ExtraFieldLength", new Int16LE(), [] ),
-            new BinaryRange(entire.subarray(offset + 30, offset + 30 + nameLength), "FileName", new ShiftJis(), [] ),
+            new BinaryRange(entire.subarray(offset + 30, offset + 30 + nameLength), "FileName", new CharEncoding("sjis"), [] ),
             new BinaryRange(entire.subarray(offset + 30 + nameLength, offset + 30 + nameLength + extraFieldLength), "ExtraField", null, [] ),
             new BinaryRange(entire.subarray(offset + 30 + nameLength + extraFieldLength, offset + entireSize), "Contents", null, [] )
         ];
