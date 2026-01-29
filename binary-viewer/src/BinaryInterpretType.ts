@@ -52,16 +52,32 @@ export class CharEncoding implements BinaryInterpretType {
         this.encoding = encoding;
     }
     toString(): string {
-        // 表示用に大文字化や特別な表記も可能
         switch (this.encoding.toLowerCase()) {
             case "ascii": return "Ascii";
             case "sjis": return "ShiftJis";
+            case "shift-jis": return "ShiftJis";
             case "utf-8": return "UTF-8";
+            case "other": return "Binary";
             default: return this.encoding;
         }
     }
+    private getTextDecoderEncoding(): string | null {
+        switch (this.encoding.toLowerCase()) {
+            case "ascii": return "ascii";
+            case "sjis": return "shift_jis";
+            case "shift-jis": return "shift_jis";
+            case "utf-8": return "utf-8";
+            case "other": return null;
+            default: return null;
+        }
+    }
     interpret(bytes: Uint8Array): string {
-        const decoded = new TextDecoder(this.encoding).decode(bytes);
+        const decoderEncoding = this.getTextDecoderEncoding();
+        if (decoderEncoding === null) {
+            // バイナリ表示
+            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        }
+        const decoded = new TextDecoder(decoderEncoding).decode(bytes);
         // 不可視文字を可視化
         return decoded
             .replace(/ /g, "(half space)")
@@ -77,17 +93,32 @@ export class TextEncoding implements BinaryInterpretType {
         this.encoding = encoding;
     }
     toString(): string {
-        // 表示用に大文字化や特別な表記も可能
         switch (this.encoding.toLowerCase()) {
             case "ascii": return "Ascii";
             case "sjis": return "ShiftJis";
+            case "shift-jis": return "ShiftJis";
             case "utf-8": return "UTF-8";
+            case "other": return "Binary";
             default: return this.encoding;
         }
     }
+    private getTextDecoderEncoding(): string | null {
+        switch (this.encoding.toLowerCase()) {
+            case "ascii": return "ascii";
+            case "sjis": return "shift_jis";
+            case "shift-jis": return "shift_jis";
+            case "utf-8": return "utf-8";
+            case "other": return null;
+            default: return null;
+        }
+    }
     interpret(bytes: Uint8Array): string {
-        const decoded = new TextDecoder(this.encoding).decode(bytes);
-        // 不可視文字を可視化
+        const decoderEncoding = this.getTextDecoderEncoding();
+        if (decoderEncoding === null) {
+            // バイナリ表示
+            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        }
+        const decoded = new TextDecoder(decoderEncoding).decode(bytes);
         return decoded;
     }
 }

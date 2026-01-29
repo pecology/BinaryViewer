@@ -7,12 +7,18 @@ function readUInt16LE(bytes: Uint8Array, offset: number): number {
 }
 
 function readUInt32LE(bytes: Uint8Array, offset: number): number {
+    // >>> 0 で符号なし32ビット整数に変換（2GB以上のファイル対応）
     return (
-        bytes[offset] |
+        (bytes[offset] |
         (bytes[offset + 1] << 8) |
         (bytes[offset + 2] << 16) |
-        (bytes[offset + 3] << 24)
+        (bytes[offset + 3] << 24)) >>> 0
     );
+}
+
+// General Purpose Bit Flag のビット11でエンコーディングを判定
+function getFileNameEncoding(generalPurposeBitFlag: number): string {
+    return (generalPurposeBitFlag & 0x0800) ? "utf-8" : "sjis";
 }
 
 export class ZipParser {
@@ -101,9 +107,11 @@ export class ZipParser {
         const bytes = entire.subarray(offset);
         if (bytes.length < 46) throw new Error("Central directory entry too short");
 
+        const generalPurposeBitFlag = readUInt16LE(bytes, 8);
         const nameLength = readUInt16LE(bytes, 28);
         const extraFieldLength = readUInt16LE(bytes, 30);
         const commentLength = readUInt16LE(bytes, 32);
+        const fileNameEncoding = getFileNameEncoding(generalPurposeBitFlag);
 
         const entireSize = 46 + nameLength + extraFieldLength + commentLength;
 
@@ -128,9 +136,9 @@ export class ZipParser {
             new BinaryRange(entire.subarray(offset + 38, offset + 42), "ExternalFileAttributes", new Int32LE(), []),
             new BinaryRange(entire.subarray(offset + 42, offset + 46), "RelativeOffsetOfLocalHeader", new Int32LEHex(), []),
             // 可変長フィールド
-            new BinaryRange(entire.subarray(offset + 46, offset + 46 + nameLength), "FileName", new CharEncoding("sjis"), []),
+            new BinaryRange(entire.subarray(offset + 46, offset + 46 + nameLength), "FileName", new CharEncoding(fileNameEncoding), []),
             new BinaryRange(entire.subarray(offset + 46 + nameLength, offset + 46 + nameLength + extraFieldLength), "ExtraField", null, []),
-            new BinaryRange(entire.subarray(offset + 46 + nameLength + extraFieldLength, offset + 46 + nameLength + extraFieldLength + commentLength), "FileComment", null, []),
+            new BinaryRange(entire.subarray(offset + 46 + nameLength + extraFieldLength, offset + 46 + nameLength + extraFieldLength + commentLength), "FileComment", new CharEncoding(fileNameEncoding), []),
         ];
 
         return new BinaryRange(
@@ -182,6 +190,8 @@ export class ZipParser {
 
         if (bytes.length < entireSize) throw new Error("File entry too short");
 
+        const fileNameEncoding = getFileNameEncoding(generalPurposeBitFlag);
+
         const subRanges: BinaryRange[] = [
             new BinaryRange(entire.subarray(offset + 0, offset + 4), "Signature", new ZipSignature(), [] ),
             new BinaryRange(entire.subarray(offset + 4, offset + 6), "Version", new Int16LE(), [] ),
@@ -194,7 +204,7 @@ export class ZipParser {
             new BinaryRange(entire.subarray(offset + 22, offset + 26), "UncompressedSize", new Int32LE(), [] ),
             new BinaryRange(entire.subarray(offset + 26, offset + 28), "FileNameLength", new Int16LE(), [] ),
             new BinaryRange(entire.subarray(offset + 28, offset + 30), "ExtraFieldLength", new Int16LE(), [] ),
-            new BinaryRange(entire.subarray(offset + 30, offset + 30 + nameLength), "FileName", new CharEncoding("sjis"), [] ),
+            new BinaryRange(entire.subarray(offset + 30, offset + 30 + nameLength), "FileName", new CharEncoding(fileNameEncoding), [] ),
             new BinaryRange(entire.subarray(offset + 30 + nameLength, offset + 30 + nameLength + extraFieldLength), "ExtraField", null, [] ),
             new BinaryRange(entire.subarray(offset + 30 + nameLength + extraFieldLength, offset + entireSize), "Contents", null, [] )
         ];

@@ -1,7 +1,6 @@
 import './style.css'
 import { ZipParser } from './zipParser.ts'
 import type { BinaryRange } from './BinaryRange.ts'
-import { TextParser } from './textParser.ts';
 
 function chunk<T>(source: Iterable<T>, chunkSize: number): T[][] {
     const result: T[][] = [];
@@ -30,7 +29,15 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
 document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('click', async () => {
     const fileInput = document.querySelector<HTMLInputElement>('#fileInput')!;
-    const data = await fileInput.files![0]?.arrayBuffer();
+    
+    // ファイル未選択チェック
+    if (!fileInput.files || fileInput.files.length === 0) {
+        alert('ファイルを選択してください');
+        return;
+    }
+    
+    const file = fileInput.files[0];
+    const data = await file.arrayBuffer();
     const parseResult = ZipParser.parse(new Uint8Array(data));
     
     // document.querySelector<HTMLDivElement>('#app')!.insertAdjacentHTML("beforeend",`
@@ -222,6 +229,13 @@ const highlight = (element: HTMLElement, highlightRangeList: BinaryRange[]) => {
     element.dataset.highlight = highlightCount.toString();
 }
 
+// XSS対策: HTMLエスケープ関数
+const escapeHtml = (text: string): string => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 const byteToString = (byte: number) => byte.toString(16).padStart(2, '0').toUpperCase();
 const toHexTableHtmlString = (hexRange: BinaryRange, pageIndex: number = 0): string => {
     const displayArray = hexRange.data.subarray(pageIndex * 1024, (pageIndex + 1) * 1024);
@@ -258,8 +272,8 @@ const toHexTableHtmlString = (hexRange: BinaryRange, pageIndex: number = 0): str
 const toStructureHtmlString = (segment: BinaryRange): string => {
     return `
 <details data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0">
-  <summary><span class="cancel-toggle"> ${segment.name} (${rangeToString(segment)})</span></summary>
-    ${segment.interpret()}
+  <summary><span class="cancel-toggle"> ${escapeHtml(segment.name)} (${rangeToString(segment)})</span></summary>
+    ${escapeHtml(segment.interpret())}
     ${segment.subRanges.reduce((acc, child) => acc + toStructureHtmlString(child), "")}
 </details>
 `;
