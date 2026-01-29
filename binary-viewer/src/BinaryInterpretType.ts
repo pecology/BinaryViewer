@@ -140,6 +140,8 @@ export class ZipSignature implements BinaryInterpretType {
         switch (signature) {
             case 0x04034B50:
                 return "PK0304(local file)";
+            case 0x08074B50:
+                return "PK0708(data descriptor)";
             case 0x02014B50:
                 return "PK0102(central directory)";
             case 0x06054B50:

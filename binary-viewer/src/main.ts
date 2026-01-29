@@ -31,7 +31,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('click', async () => {
     const fileInput = document.querySelector<HTMLInputElement>('#fileInput')!;
     const data = await fileInput.files![0]?.arrayBuffer();
-    const parseResult = TextParser.parse(new Uint8Array(data));
+    const parseResult = ZipParser.parse(new Uint8Array(data));
     
     // document.querySelector<HTMLDivElement>('#app')!.insertAdjacentHTML("beforeend",`
     document.querySelector<HTMLDivElement>('#app')!.innerHTML = `

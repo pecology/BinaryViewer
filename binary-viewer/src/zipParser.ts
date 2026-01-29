@@ -23,13 +23,20 @@ export class ZipParser {
             const signature = data.subarray(offset, offset + 4);
             let element: BinaryRange;
             if (signature[0] === 0x50 && signature[1] === 0x4B && signature[2] === 0x03 && signature[3] === 0x04) {
+                // PK\x03\x04 - Local file header
                 element = ZipParser.parseFileEntry(data, offset);
+            } else if (signature[0] === 0x50 && signature[1] === 0x4B && signature[2] === 0x07 && signature[3] === 0x08) {
+                // PK\x07\x08 - Data descriptor
+                element = ZipParser.parseDataDescriptor(data, offset);
             } else if (signature[0] === 0x50 && signature[1] === 0x4B && signature[2] === 0x01 && signature[3] === 0x02) {
+                // PK\x01\x02 - Central directory file header
                 element = ZipParser.parseCentralDirectory(data, offset);
             } else if (signature[0] === 0x50 && signature[1] === 0x4B && signature[2] === 0x05 && signature[3] === 0x06) {
+                // PK\x05\x06 - End of central directory record
                 element = ZipParser.parseEndOfCentralDirectory(data, offset);
             } else {
-                throw new Error("Unknown ZIP format");
+                const sigHex = Array.from(signature).map(b => b.toString(16).padStart(2, '0')).join(' ');
+                throw new Error(`Unknown ZIP format at offset ${offset}: signature = ${sigHex}`);
             }
             subRanges.push(element);
             offset += element.data.length;
@@ -38,6 +45,26 @@ export class ZipParser {
         return new BinaryRange(
             data,
             "ZipFile",
+            null,
+            subRanges
+        );
+    }
+
+    private static parseDataDescriptor(entire: Uint8Array, offset: number): BinaryRange {
+        const bytes = entire.subarray(offset);
+        // Data Descriptorは12バイト（シグネチャなし）または16バイト（シグネチャあり）
+        // シグネチャありの場合: PK\x07\x08 + CRC32(4) + CompressedSize(4) + UncompressedSize(4) = 16バイト
+        if (bytes.length < 16) throw new Error("Data descriptor too short");
+
+        const subRanges: BinaryRange[] = [
+            new BinaryRange(entire.subarray(offset + 0, offset + 4), "Signature", new ZipSignature(), []),
+            new BinaryRange(entire.subarray(offset + 4, offset + 8), "CRC32", new Int32LE(), []),
+            new BinaryRange(entire.subarray(offset + 8, offset + 12), "CompressedSize", new Int32LE(), []),
+            new BinaryRange(entire.subarray(offset + 12, offset + 16), "UncompressedSize", new Int32LE(), []),
+        ];
+        return new BinaryRange(
+            entire.subarray(offset, offset + 16),
+            "DataDescriptor",
             null,
             subRanges
         );
@@ -118,9 +145,38 @@ export class ZipParser {
         const bytes = entire.subarray(offset);
         if (bytes.length < 30) throw new Error("File entry too short");
 
+        const generalPurposeBitFlag = readUInt16LE(bytes, 6);
         const nameLength = readUInt16LE(bytes, 26);
         const extraFieldLength = readUInt16LE(bytes, 28);
-        const compressedSize = readUInt32LE(bytes, 18);
+        let compressedSize = readUInt32LE(bytes, 18);
+
+        // ビット3が立っている場合、CompressedSizeは0で、Data Descriptorに実際のサイズがある
+        // Data Descriptorのシグネチャ(PK\x07\x08)を探す必要がある
+        const hasDataDescriptor = (generalPurposeBitFlag & 0x0008) !== 0;
+        
+        if (hasDataDescriptor && compressedSize === 0) {
+            // Data Descriptorのシグネチャを探す
+            const dataStart = offset + 30 + nameLength + extraFieldLength;
+            let searchOffset = dataStart;
+            while (searchOffset < entire.length - 4) {
+                if (entire[searchOffset] === 0x50 && 
+                    entire[searchOffset + 1] === 0x4B && 
+                    entire[searchOffset + 2] === 0x07 && 
+                    entire[searchOffset + 3] === 0x08) {
+                    compressedSize = searchOffset - dataStart;
+                    break;
+                }
+                // 次のPKシグネチャ(Central Directory等)も探す
+                if (entire[searchOffset] === 0x50 && 
+                    entire[searchOffset + 1] === 0x4B && 
+                    (entire[searchOffset + 2] === 0x01 || entire[searchOffset + 2] === 0x03 || entire[searchOffset + 2] === 0x05)) {
+                    // Data Descriptorなしでいきなり次の構造が来た場合
+                    compressedSize = searchOffset - dataStart;
+                    break;
+                }
+                searchOffset++;
+            }
+        }
 
         const entireSize = 30 + nameLength + extraFieldLength + compressedSize;
 
