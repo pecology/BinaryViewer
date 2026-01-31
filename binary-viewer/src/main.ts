@@ -1,5 +1,7 @@
 import './style.css'
 import { ZipParser } from './zipParser.ts'
+import { TextParser } from './textParser.ts'
+import { parseKsySchema, parseBinary } from './ksy/DynamicParser.ts'
 import type { BinaryRange } from './BinaryRange.ts'
 
 function chunk<T>(source: Iterable<T>, chunkSize: number): T[][] {
@@ -20,13 +22,40 @@ function chunk<T>(source: Iterable<T>, chunkSize: number): T[][] {
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="input">
-    <div>
+    <div class="input-row">
         <input type="file" id="fileInput" />
+        <select id="parser-select">
+            <option value="zip">ZIP Parser</option>
+            <option value="text">Text Parser</option>
+            <option value="ksy">KSY (Custom Schema)</option>
+        </select>
         <button id="load-button">Load File</button>
+    </div>
+    <div id="ksy-input" class="ksy-input" style="display: none;">
+        <label for="ksyFileInput">KSY Schema File:</label>
+        <input type="file" id="ksyFileInput" accept=".ksy,.yaml,.yml" />
+        <span class="ksy-hint">または下のテキストエリアに直接入力</span>
+        <textarea id="ksyText" placeholder="meta:\n  id: my_format\n  endian: le\nseq:\n  - id: magic\n    type: u4"></textarea>
     </div>
     <div id="error-message" class="error-message"></div>
   </div>
 `;
+
+// パーサー選択時にKSY入力欄の表示を切り替え
+document.querySelector<HTMLSelectElement>('#parser-select')!.addEventListener('change', (e) => {
+    const select = e.target as HTMLSelectElement;
+    const ksyInput = document.querySelector<HTMLDivElement>('#ksy-input')!;
+    ksyInput.style.display = select.value === 'ksy' ? 'block' : 'none';
+});
+
+// KSYファイル読み込み時にテキストエリアに反映
+document.querySelector<HTMLInputElement>('#ksyFileInput')!.addEventListener('change', async (e) => {
+    const input = e.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+        const text = await input.files[0].text();
+        document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = text;
+    }
+});
 
 // エラーメッセージを表示する関数
 function showError(message: string): void {
@@ -48,6 +77,7 @@ function clearError(): void {
 
 document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('click', async () => {
     const fileInput = document.querySelector<HTMLInputElement>('#fileInput')!;
+    const parserSelect = document.querySelector<HTMLSelectElement>('#parser-select')!;
     clearError();
     
     // ファイル未選択チェック
@@ -57,11 +87,37 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
     }
     
     const file = fileInput.files[0];
+    const parserType = parserSelect.value;
     
     let parseResult: BinaryRange;
     try {
         const data = await file.arrayBuffer();
-        parseResult = ZipParser.parse(new Uint8Array(data));
+        
+        switch (parserType) {
+            case 'zip':
+                parseResult = ZipParser.parse(new Uint8Array(data));
+                break;
+            case 'text':
+                parseResult = TextParser.parse(new Uint8Array(data));
+                break;
+            case 'ksy': {
+                const ksyText = document.querySelector<HTMLTextAreaElement>('#ksyText')!.value.trim();
+                if (!ksyText) {
+                    showError('KSYスキーマを入力してください');
+                    return;
+                }
+                const schema = parseKsySchema(ksyText);
+                const result = parseBinary(data, schema);
+                if (result.warnings.length > 0) {
+                    console.warn('Parse warnings:', result.warnings);
+                }
+                parseResult = result.root;
+                break;
+            }
+            default:
+                showError('不明なパーサータイプ');
+                return;
+        }
     } catch (e) {
         showError(`パースエラー: ${e instanceof Error ? e.message : String(e)}`);
         return;
