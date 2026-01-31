@@ -11,6 +11,8 @@ let currentData: ArrayBuffer | null = null;
 let currentFileName: string = '';
 // 編集可能なバイナリデータ（Uint8Arrayで直接編集可能）
 let editableData: Uint8Array | null = null;
+// 現在のパース結果（イベントリスナーから参照）
+let currentParseResult: BinaryRange | null = null;
 
 function chunk<T>(source: Iterable<T>, chunkSize: number): T[][] {
     const result: T[][] = [];
@@ -575,6 +577,9 @@ async function parseAndDisplay(): Promise<void> {
         return;
     }
     
+    // グローバル変数を更新（イベントリスナーから参照）
+    currentParseResult = parseResult;
+    
     displayParseResult(parseResult);
 }
 
@@ -788,7 +793,10 @@ function displayParseResult(parseResult: BinaryRange): void {
                 }
             );
     });
+}
 
+// Hexテーブルのクリックイベントハンドラ（初期化時に一度だけ登録）
+function setupHexTableEventListeners(): void {
     document.querySelector<HTMLElement>('#hex-table')!.addEventListener('click', (e) => {
         // テーブルをクリックしたときも同様に色付けする
         const target = e.target as HTMLElement;
@@ -798,19 +806,18 @@ function displayParseResult(parseResult: BinaryRange): void {
             return;
         }
         
+        // currentParseResultがない場合は何もしない
+        if (!currentParseResult) {
+            return;
+        }
+        
         const offset = parseInt(target.dataset.offset);
 
-        // ハイライト対象のRangeを取得
-        const highlightRangeList: BinaryRange[] = getRangeContainsList(parseResult, offset);
-        highlightRangeList.shift(); // 最初の要素は全体なので削除
-
-        // 色付け処理
-        [...document.querySelectorAll<HTMLTableCellElement>('#hex-table td'),
-        ...document.querySelectorAll<HTMLElement>('.details-wrapper details')
-        ].forEach(e => highlight(e, highlightRangeList));
-
-        // 対応するアコーディオンを開く（親から子まで順に）
-        highlightRangeList.forEach(range => {
+        // ハイライト対象のRangeを取得（全階層）
+        const allRangeList: BinaryRange[] = getRangeContainsList(currentParseResult, offset);
+        
+        // 対応するアコーディオンを開く（親から子まで全階層）
+        allRangeList.forEach(range => {
             const detailsElement = document.querySelector<HTMLDetailsElement>(
                 `.details-wrapper details[data-offset="${range.data.byteOffset}"][data-length="${range.data.byteLength}"]`
             );
@@ -818,6 +825,14 @@ function displayParseResult(parseResult: BinaryRange): void {
                 detailsElement.open = true;
             }
         });
+
+        // ハイライト用のリストは最上層を除く
+        const highlightRangeList = allRangeList.slice(1);
+
+        // 色付け処理
+        [...document.querySelectorAll<HTMLTableCellElement>('#hex-table td'),
+        ...document.querySelectorAll<HTMLElement>('.details-wrapper details')
+        ].forEach(e => highlight(e, highlightRangeList));
 
         // クリックした構造に対応する箇所にスクロール
         const deepestDetails = [...document.querySelectorAll<HTMLElement>('.details-wrapper details')]
@@ -979,6 +994,9 @@ const getRangeContainsList = (range: BinaryRange, offset: number, length: number
             , [range]
         )
         : [];
+
+// 初期化時にHexテーブルのイベントリスナーを登録
+setupHexTableEventListeners();
 
 
 const highlight = (element: HTMLElement, highlightRangeList: BinaryRange[]) => {
