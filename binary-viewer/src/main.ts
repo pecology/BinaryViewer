@@ -3,6 +3,7 @@ import { ZipParser } from './zipParser.ts'
 import { TextParser } from './textParser.ts'
 import { parseKsySchema, parseBinary } from './ksy/DynamicParser.ts'
 import { saveKsy, loadKsy, deleteKsy, listKsyNames, hasKsy } from './ksyStorage.ts'
+import { saveExtensionMapping, getParserForExtension, getExtensionFromFileName, type ParserType } from './extensionMapping.ts'
 import type { BinaryRange } from './BinaryRange.ts'
 
 // 現在読み込んでいるバイナリデータ
@@ -41,6 +42,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
               <option value="text">Text Parser</option>
               <option value="ksy">KSY (Custom Schema)</option>
           </select>
+          <button id="link-ext-btn" title="この拡張子に紐づける">🔗 拡張子に紐づけ</button>
+          <div id="ext-mapping-info" class="ext-mapping-info"></div>
       </div>
       <div id="ksy-input" class="ksy-input" style="display: none;">
           <div class="ksy-storage-row">
@@ -137,6 +140,65 @@ document.addEventListener('paste', async (e) => {
     }
 });
 
+// 現在のパーサー設定値を取得（KSY選択時はスキーマ名も含める）
+function getCurrentParserValue(): ParserType {
+    const parserSelect = document.querySelector<HTMLSelectElement>('#parser-select')!;
+    const parserType = parserSelect.value;
+    if (parserType === 'ksy') {
+        const ksySavedSelect = document.querySelector<HTMLSelectElement>('#ksy-saved-select')!;
+        const ksyName = ksySavedSelect.value;
+        if (ksyName) {
+            return `ksy:${ksyName}`;
+        }
+        return 'ksy:';
+    }
+    return parserType as ParserType;
+}
+
+// パーサーを設定する（拡張子マッピングからの自動選択時に使用）
+function setParser(parser: ParserType): void {
+    const parserSelect = document.querySelector<HTMLSelectElement>('#parser-select')!;
+    const ksyInput = document.querySelector<HTMLDivElement>('#ksy-input')!;
+    
+    if (parser.startsWith('ksy:')) {
+        parserSelect.value = 'ksy';
+        ksyInput.style.display = 'block';
+        const ksyName = parser.substring(4);
+        if (ksyName) {
+            const ksySavedSelect = document.querySelector<HTMLSelectElement>('#ksy-saved-select')!;
+            ksySavedSelect.value = ksyName;
+            const content = loadKsy(ksyName);
+            if (content) {
+                document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = content;
+                document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = ksyName;
+            }
+        }
+    } else {
+        parserSelect.value = parser;
+        ksyInput.style.display = 'none';
+    }
+}
+
+// 拡張子マッピング情報を更新
+function updateExtMappingInfo(): void {
+    const infoDiv = document.querySelector<HTMLDivElement>('#ext-mapping-info')!;
+    if (!currentFileName) {
+        infoDiv.textContent = '';
+        return;
+    }
+    const ext = getExtensionFromFileName(currentFileName);
+    if (!ext) {
+        infoDiv.textContent = '';
+        return;
+    }
+    const mapped = getParserForExtension(ext);
+    if (mapped) {
+        infoDiv.textContent = `${ext} → ${mapped}`;
+    } else {
+        infoDiv.textContent = `${ext}: 未設定`;
+    }
+}
+
 // ファイルを読み込む共通関数
 async function loadFile(file: File): Promise<void> {
     clearError();
@@ -144,11 +206,37 @@ async function loadFile(file: File): Promise<void> {
         currentData = await file.arrayBuffer();
         currentFileName = file.name;
         document.querySelector<HTMLSpanElement>('#current-file-name')!.textContent = `📄 ${file.name}`;
+        
+        // 拡張子に基づいてパーサーを自動選択
+        const ext = getExtensionFromFileName(file.name);
+        const mappedParser = getParserForExtension(ext);
+        if (mappedParser) {
+            setParser(mappedParser);
+        }
+        updateExtMappingInfo();
+        
         await parseAndDisplay();
     } catch (e) {
         showError(`ファイル読み込みエラー: ${e instanceof Error ? e.message : String(e)}`);
     }
 }
+
+// 拡張子に紐づけボタン
+document.querySelector<HTMLButtonElement>('#link-ext-btn')!.addEventListener('click', () => {
+    if (!currentFileName) {
+        alert('ファイルを選択してください');
+        return;
+    }
+    const ext = getExtensionFromFileName(currentFileName);
+    if (!ext) {
+        alert('ファイルに拡張子がありません');
+        return;
+    }
+    const parserValue = getCurrentParserValue();
+    saveExtensionMapping(ext, parserValue);
+    updateExtMappingInfo();
+    alert(`拡張子 "${ext}" を "${parserValue}" に紐づけました`);
+});
 
 // KSYファイル読み込み時にテキストエリアに反映
 document.querySelector<HTMLInputElement>('#ksyFileInput')!.addEventListener('change', async (e) => {
