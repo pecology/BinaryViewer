@@ -2,8 +2,8 @@ import './style.css'
 import { ZipParser } from './zipParser.ts'
 import { TextParser } from './textParser.ts'
 import { parseKsySchema, parseBinary } from './ksy/DynamicParser.ts'
-import { saveKsy, loadKsy, deleteKsy, listKsyNames, hasKsy } from './ksyStorage.ts'
-import { saveExtensionMapping, getParserForExtension, getExtensionFromFileName, type ParserType } from './extensionMapping.ts'
+import { saveKsy, loadKsy, deleteKsy, listKsyNames, hasKsy, exportAllKsy, importKsy } from './ksyStorage.ts'
+import { saveExtensionMapping, getParserForExtension, getExtensionFromFileName, getAllExtensionMappings, removeExtensionMapping, type ParserType } from './extensionMapping.ts'
 import type { BinaryRange } from './BinaryRange.ts'
 
 // 現在読み込んでいるバイナリデータ
@@ -37,37 +37,43 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <input type="file" id="fileInput" />
       </div>
       <div id="current-file-name" class="current-file-name"></div>
-      <div class="download-section">
-          <button id="download-btn" disabled>💾 ダウンロード</button>
-      </div>
       <div class="parser-section">
           <label>パーサー:</label>
           <select id="parser-select">
-              <option value="zip">ZIP Parser</option>
-              <option value="text">Text Parser</option>
-              <option value="ksy">KSY (Custom Schema)</option>
+              <!-- 動的に生成 -->
           </select>
           <button id="link-ext-btn" title="この拡張子に紐づける">🔗 拡張子に紐づけ</button>
           <div id="ext-mapping-info" class="ext-mapping-info"></div>
+          <details class="ext-mapping-list">
+              <summary>拡張子マッピング一覧</summary>
+              <div id="ext-mapping-list-content"></div>
+          </details>
       </div>
-      <div id="ksy-input" class="ksy-input" style="display: none;">
-          <div class="ksy-storage-row">
-              <label>保存済み:</label>
-              <select id="ksy-saved-select">
-                  <option value="">-- 選択 --</option>
-              </select>
-              <button id="ksy-load-btn" title="読み込み">📂</button>
-              <button id="ksy-delete-btn" title="削除">🗑️</button>
-          </div>
-          <div class="ksy-file-row">
-              <label>ファイル:</label>
-              <input type="file" id="ksyFileInput" accept=".ksy,.yaml,.yml" />
-          </div>
-          <div class="ksy-save-row">
-              <input type="text" id="ksy-save-name" placeholder="スキーマ名" />
-              <button id="ksy-save-btn">💾</button>
-          </div>
-          <textarea id="ksyText" placeholder="meta:\n  id: my_format\n  endian: le\nseq:\n  - id: magic\n    type: u4"></textarea>
+      <div id="ksy-editor" class="ksy-editor">
+          <details>
+              <summary>📝 KSYスキーマ編集</summary>
+              <div class="ksy-editor-content">
+                  <div class="ksy-file-row">
+                      <label>ファイルから読み込み:</label>
+                      <input type="file" id="ksyFileInput" accept=".ksy,.yaml,.yml" />
+                  </div>
+                  <div class="ksy-save-row">
+                      <input type="text" id="ksy-save-name" placeholder="スキーマ名" />
+                      <button id="ksy-save-btn">💾 保存</button>
+                      <button id="ksy-delete-btn" title="削除">🗑️</button>
+                  </div>
+                  <textarea id="ksyText" placeholder="meta:\n  id: my_format\n  endian: le\nseq:\n  - id: magic\n    type: u4"></textarea>
+                  <button id="ksy-apply-btn">▶ 適用（保存せずにパース）</button>
+                  <details class="ksy-export-import">
+                      <summary>KSYエクスポート/インポート</summary>
+                      <div class="ksy-export-import-content">
+                          <button id="ksy-export-all-btn">📤 全てエクスポート</button>
+                          <button id="ksy-import-btn">📥 インポート</button>
+                          <input type="file" id="ksy-import-file" accept=".json" style="display: none;" />
+                      </div>
+                  </details>
+              </div>
+          </details>
       </div>
       <div id="error-message" class="error-message"></div>
     </div>
@@ -75,24 +81,87 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <h3>Hex <span id="edit-hint" class="edit-hint">(ダブルクリックで編集)</span></h3>
       <div id="hex-table-control"></div>
       <div id="hex-table"></div>
+      <div class="download-section">
+          <button id="download-btn" disabled>💾 編集したデータをダウンロード</button>
+      </div>
     </div>
     <div class="panel structure-panel">
-      <h3>構造</h3>
+      <h3>構造 <span class="structure-controls"><button id="expand-all-btn" title="全て開く">▼ 全開</button><button id="collapse-all-btn" title="全て閉じる">▶ 全閉</button></span></h3>
       <div class="details-wrapper"></div>
     </div>
   </div>
 `;
 
-// パーサー選択時にKSY入力欄の表示を切り替え & 再パース
+// パーサーセレクトを更新する関数
+function updateParserSelect(selectedValue?: string): void {
+    const select = document.querySelector<HTMLSelectElement>('#parser-select')!;
+    const currentValue = selectedValue ?? select.value;
+    
+    // 組み込みパーサー
+    let html = `
+        <optgroup label="組み込みパーサー">
+            <option value="zip">ZIP Parser</option>
+            <option value="text">Text Parser</option>
+        </optgroup>
+    `;
+    
+    // 保存済みKSYスキーマ
+    const ksyNames = listKsyNames();
+    if (ksyNames.length > 0) {
+        html += `<optgroup label="KSYスキーマ">`;
+        ksyNames.forEach(name => {
+            html += `<option value="ksy:${name}">📄 ${name}</option>`;
+        });
+        html += `</optgroup>`;
+    }
+    
+    select.innerHTML = html;
+    
+    // 値を復元（存在する場合）
+    if (currentValue) {
+        const option = select.querySelector<HTMLOptionElement>(`option[value="${currentValue}"]`);
+        if (option) {
+            select.value = currentValue;
+        }
+    }
+}
+
+// 初期化時にパーサーセレクトを更新
+updateParserSelect();
+
+// パーサー選択時に再パース
 document.querySelector<HTMLSelectElement>('#parser-select')!.addEventListener('change', (e) => {
     const select = e.target as HTMLSelectElement;
-    const ksyInput = document.querySelector<HTMLDivElement>('#ksy-input')!;
-    ksyInput.style.display = select.value === 'ksy' ? 'block' : 'none';
+    const value = select.value;
+    
+    // KSYスキーマが選択された場合、エディタにロード
+    if (value.startsWith('ksy:')) {
+        const ksyName = value.substring(4);
+        const content = loadKsy(ksyName);
+        if (content) {
+            document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = content;
+            document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = ksyName;
+        }
+    }
     
     // データがあれば再パース
     if (currentData) {
         parseAndDisplay();
     }
+});
+
+// アコーディオン全開ボタン
+document.querySelector<HTMLButtonElement>('#expand-all-btn')!.addEventListener('click', () => {
+    document.querySelectorAll<HTMLDetailsElement>('.details-wrapper details').forEach(details => {
+        details.open = true;
+    });
+});
+
+// アコーディオン全閉ボタン
+document.querySelector<HTMLButtonElement>('#collapse-all-btn')!.addEventListener('click', () => {
+    document.querySelectorAll<HTMLDetailsElement>('.details-wrapper details').forEach(details => {
+        details.open = false;
+    });
 });
 
 // ファイル選択時に自動パース
@@ -145,42 +214,33 @@ document.addEventListener('paste', async (e) => {
     }
 });
 
-// 現在のパーサー設定値を取得（KSY選択時はスキーマ名も含める）
+// 現在のパーサー設定値を取得
 function getCurrentParserValue(): ParserType {
     const parserSelect = document.querySelector<HTMLSelectElement>('#parser-select')!;
-    const parserType = parserSelect.value;
-    if (parserType === 'ksy') {
-        const ksySavedSelect = document.querySelector<HTMLSelectElement>('#ksy-saved-select')!;
-        const ksyName = ksySavedSelect.value;
-        if (ksyName) {
-            return `ksy:${ksyName}`;
-        }
-        return 'ksy:';
-    }
-    return parserType as ParserType;
+    return parserSelect.value as ParserType;
 }
 
 // パーサーを設定する（拡張子マッピングからの自動選択時に使用）
 function setParser(parser: ParserType): void {
     const parserSelect = document.querySelector<HTMLSelectElement>('#parser-select')!;
-    const ksyInput = document.querySelector<HTMLDivElement>('#ksy-input')!;
     
-    if (parser.startsWith('ksy:')) {
-        parserSelect.value = 'ksy';
-        ksyInput.style.display = 'block';
-        const ksyName = parser.substring(4);
-        if (ksyName) {
-            const ksySavedSelect = document.querySelector<HTMLSelectElement>('#ksy-saved-select')!;
-            ksySavedSelect.value = ksyName;
+    // まずセレクトを更新（KSYスキーマが追加されている可能性があるため）
+    updateParserSelect(parser);
+    
+    // 値が存在する場合は設定
+    const option = parserSelect.querySelector<HTMLOptionElement>(`option[value="${parser}"]`);
+    if (option) {
+        parserSelect.value = parser;
+        
+        // KSYスキーマの場合はエディタにロード
+        if (parser.startsWith('ksy:')) {
+            const ksyName = parser.substring(4);
             const content = loadKsy(ksyName);
             if (content) {
                 document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = content;
                 document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = ksyName;
             }
         }
-    } else {
-        parserSelect.value = parser;
-        ksyInput.style.display = 'none';
     }
 }
 
@@ -244,8 +304,45 @@ document.querySelector<HTMLButtonElement>('#link-ext-btn')!.addEventListener('cl
     const parserValue = getCurrentParserValue();
     saveExtensionMapping(ext, parserValue);
     updateExtMappingInfo();
+    updateExtMappingList();
     alert(`拡張子 "${ext}" を "${parserValue}" に紐づけました`);
 });
+
+// 拡張子マッピング一覧を更新
+function updateExtMappingList(): void {
+    const container = document.querySelector<HTMLDivElement>('#ext-mapping-list-content')!;
+    const mappings = getAllExtensionMappings();
+    const entries = Object.entries(mappings);
+    
+    if (entries.length === 0) {
+        container.innerHTML = '<div class="ext-mapping-empty">マッピングなし</div>';
+        return;
+    }
+    
+    container.innerHTML = entries.map(([ext, parser]) => `
+        <div class="ext-mapping-item">
+            <span class="ext-mapping-ext">${ext}</span>
+            <span class="ext-mapping-arrow">→</span>
+            <span class="ext-mapping-parser">${parser}</span>
+            <button class="ext-mapping-delete" data-ext="${ext}" title="削除">✕</button>
+        </div>
+    `).join('');
+    
+    // 削除ボタンのイベントハンドラ
+    container.querySelectorAll<HTMLButtonElement>('.ext-mapping-delete').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const ext = btn.dataset.ext!;
+            if (confirm(`"${ext}" のマッピングを削除しますか？`)) {
+                removeExtensionMapping(ext);
+                updateExtMappingList();
+                updateExtMappingInfo();
+            }
+        });
+    });
+}
+
+// 初期化時にマッピング一覧を更新
+updateExtMappingList();
 
 // ダウンロードボタン
 document.querySelector<HTMLButtonElement>('#download-btn')!.addEventListener('click', () => {
@@ -271,54 +368,9 @@ document.querySelector<HTMLInputElement>('#ksyFileInput')!.addEventListener('cha
     if (input.files && input.files.length > 0) {
         const text = await input.files[0].text();
         document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = text;
-        // KSYが変更されたら再パース
-        if (currentData) {
-            parseAndDisplay();
-        }
-    }
-});
-
-// 保存済みKSY一覧を更新
-function updateKsySavedList(): void {
-    const select = document.querySelector<HTMLSelectElement>('#ksy-saved-select')!;
-    const names = listKsyNames();
-    select.innerHTML = '<option value="">-- 選択してください --</option>' +
-        names.map(name => `<option value="${name}">${name}</option>`).join('');
-}
-
-// 初期化時に一覧を更新
-updateKsySavedList();
-
-// 保存済みKSYを読み込み
-document.querySelector<HTMLButtonElement>('#ksy-load-btn')!.addEventListener('click', () => {
-    const select = document.querySelector<HTMLSelectElement>('#ksy-saved-select')!;
-    const name = select.value;
-    if (!name) {
-        alert('スキーマを選択してください');
-        return;
-    }
-    const content = loadKsy(name);
-    if (content) {
-        document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = content;
-        document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = name;
-        // KSYが変更されたら再パース
-        if (currentData) {
-            parseAndDisplay();
-        }
-    }
-});
-
-// 保存済みKSYを削除
-document.querySelector<HTMLButtonElement>('#ksy-delete-btn')!.addEventListener('click', () => {
-    const select = document.querySelector<HTMLSelectElement>('#ksy-saved-select')!;
-    const name = select.value;
-    if (!name) {
-        alert('削除するスキーマを選択してください');
-        return;
-    }
-    if (confirm(`"${name}" を削除しますか？`)) {
-        deleteKsy(name);
-        updateKsySavedList();
+        // ファイル名からスキーマ名を設定
+        const fileName = input.files[0].name.replace(/\.(ksy|yaml|yml)$/i, '');
+        document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = fileName;
     }
 });
 
@@ -343,8 +395,126 @@ document.querySelector<HTMLButtonElement>('#ksy-save-btn')!.addEventListener('cl
     }
     
     saveKsy(name, content);
-    updateKsySavedList();
+    updateParserSelect(`ksy:${name}`);
     alert(`"${name}" を保存しました`);
+});
+
+// 保存済みKSYを削除
+document.querySelector<HTMLButtonElement>('#ksy-delete-btn')!.addEventListener('click', () => {
+    const nameInput = document.querySelector<HTMLInputElement>('#ksy-save-name')!;
+    const name = nameInput.value.trim();
+    if (!name) {
+        alert('削除するスキーマ名を入力してください');
+        return;
+    }
+    if (!hasKsy(name)) {
+        alert(`"${name}" は保存されていません`);
+        return;
+    }
+    if (confirm(`"${name}" を削除しますか？`)) {
+        deleteKsy(name);
+        updateParserSelect();
+        nameInput.value = '';
+        document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = '';
+        alert(`"${name}" を削除しました`);
+    }
+});
+
+// KSYを適用（保存せずにパース）
+document.querySelector<HTMLButtonElement>('#ksy-apply-btn')!.addEventListener('click', () => {
+    const textArea = document.querySelector<HTMLTextAreaElement>('#ksyText')!;
+    const content = textArea.value.trim();
+    
+    if (!content) {
+        alert('スキーマ定義を入力してください');
+        return;
+    }
+    
+    if (currentData) {
+        // 一時的なパース用にパーサー選択を変更せずにパース
+        clearError();
+        try {
+            const schema = parseKsySchema(content);
+            const result = parseBinary(currentData, schema);
+            if (result.warnings.length > 0) {
+                console.warn('Parse warnings:', result.warnings);
+            }
+            displayParseResult(result.root);
+        } catch (e) {
+            showError(`パースエラー: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    } else {
+        alert('ファイルを読み込んでください');
+    }
+});
+
+// KSY全エクスポート
+document.querySelector<HTMLButtonElement>('#ksy-export-all-btn')!.addEventListener('click', () => {
+    const data = exportAllKsy();
+    const names = Object.keys(data);
+    
+    if (names.length === 0) {
+        alert('エクスポートするKSYスキーマがありません');
+        return;
+    }
+    
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ksy-schemas.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    alert(`${names.length} 件のKSYスキーマをエクスポートしました`);
+});
+
+// KSYインポートボタン
+document.querySelector<HTMLButtonElement>('#ksy-import-btn')!.addEventListener('click', () => {
+    document.querySelector<HTMLInputElement>('#ksy-import-file')!.click();
+});
+
+// KSYインポートファイル選択
+document.querySelector<HTMLInputElement>('#ksy-import-file')!.addEventListener('change', async (e) => {
+    const input = e.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    
+    try {
+        const text = await input.files[0].text();
+        const data = JSON.parse(text);
+        
+        if (typeof data !== 'object' || data === null) {
+            throw new Error('無効なJSONフォーマット');
+        }
+        
+        const existingNames = listKsyNames();
+        const newNames = Object.keys(data);
+        const conflicts = newNames.filter(name => existingNames.includes(name));
+        
+        let overwrite = false;
+        if (conflicts.length > 0) {
+            overwrite = confirm(
+                `以下のスキーマが既に存在します:\n${conflicts.join(', ')}\n\n上書きしますか？`
+            );
+        }
+        
+        const imported = importKsy(data, overwrite);
+        updateParserSelect();
+        
+        if (imported.length > 0) {
+            alert(`${imported.length} 件のKSYスキーマをインポートしました:\n${imported.join(', ')}`);
+        } else {
+            alert('インポートされたスキーマはありません');
+        }
+    } catch (err) {
+        alert(`インポートエラー: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    
+    // ファイル選択をリセット
+    input.value = '';
 });
 
 // エラーメッセージを表示する関数
@@ -378,30 +548,27 @@ async function parseAndDisplay(): Promise<void> {
     
     let parseResult: BinaryRange;
     try {
-        switch (parserType) {
-            case 'zip':
-                parseResult = ZipParser.parse(new Uint8Array(currentData));
-                break;
-            case 'text':
-                parseResult = TextParser.parse(new Uint8Array(currentData));
-                break;
-            case 'ksy': {
-                const ksyText = document.querySelector<HTMLTextAreaElement>('#ksyText')!.value.trim();
-                if (!ksyText) {
-                    showError('KSYスキーマを入力してください');
-                    return;
-                }
-                const schema = parseKsySchema(ksyText);
-                const result = parseBinary(currentData, schema);
-                if (result.warnings.length > 0) {
-                    console.warn('Parse warnings:', result.warnings);
-                }
-                parseResult = result.root;
-                break;
-            }
-            default:
-                showError('不明なパーサータイプ');
+        if (parserType === 'zip') {
+            parseResult = ZipParser.parse(new Uint8Array(currentData));
+        } else if (parserType === 'text') {
+            parseResult = TextParser.parse(new Uint8Array(currentData));
+        } else if (parserType.startsWith('ksy:')) {
+            // 保存済みKSYスキーマを使用
+            const ksyName = parserType.substring(4);
+            const ksyContent = loadKsy(ksyName);
+            if (!ksyContent) {
+                showError(`KSYスキーマ "${ksyName}" が見つかりません`);
                 return;
+            }
+            const schema = parseKsySchema(ksyContent);
+            const result = parseBinary(currentData, schema);
+            if (result.warnings.length > 0) {
+                console.warn('Parse warnings:', result.warnings);
+            }
+            parseResult = result.root;
+        } else {
+            showError('不明なパーサータイプ');
+            return;
         }
     } catch (e) {
         showError(`パースエラー: ${e instanceof Error ? e.message : String(e)}`);
@@ -642,16 +809,29 @@ function displayParseResult(parseResult: BinaryRange): void {
         ...document.querySelectorAll<HTMLElement>('.details-wrapper details')
         ].forEach(e => highlight(e, highlightRangeList));
 
-        // クリックした構造に対応する箇所に、テーブルのスクロールを合わせる
-        [...document.querySelectorAll<HTMLElement>('.details-wrapper details')]
-            .reduce((acc, details) => parseInt(details.dataset.highlight!) >= parseInt(acc.dataset.highlight!) ? details : acc)
-            .scrollIntoView(
-                {
-                    behavior: 'smooth', 
-                    block: 'center'
-                }
+        // 対応するアコーディオンを開く（親から子まで順に）
+        highlightRangeList.forEach(range => {
+            const detailsElement = document.querySelector<HTMLDetailsElement>(
+                `.details-wrapper details[data-offset="${range.data.byteOffset}"][data-length="${range.data.byteLength}"]`
             );
+            if (detailsElement) {
+                detailsElement.open = true;
+            }
+        });
 
+        // クリックした構造に対応する箇所にスクロール
+        const deepestDetails = [...document.querySelectorAll<HTMLElement>('.details-wrapper details')]
+            .filter(d => parseInt(d.dataset.highlight!) > 0)
+            .reduce((acc, details) => 
+                parseInt(details.dataset.highlight!) >= parseInt(acc.dataset.highlight!) ? details : acc
+            , document.querySelector<HTMLElement>('.details-wrapper details')!);
+        
+        if (deepestDetails) {
+            deepestDetails.scrollIntoView({
+                behavior: 'smooth', 
+                block: 'center'
+            });
+        }
     });
 
     // Hexテーブルのダブルクリック編集機能

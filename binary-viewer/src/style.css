@@ -91,7 +91,8 @@ h1 {
 
 /* ダウンロードセクション */
 .download-section {
-  padding: 0 15px 10px;
+  padding: 10px 15px;
+  border-top: 1px solid #ddd;
 }
 
 #download-btn {
@@ -121,6 +122,29 @@ h1 {
   font-size: 11px;
   color: #888;
   font-weight: normal;
+}
+
+/* 構造パネルのコントロール */
+.structure-controls {
+  float: right;
+  font-weight: normal;
+}
+
+.structure-controls button {
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 3px;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  color: #666;
+  cursor: pointer;
+  margin-left: 4px;
+}
+
+.structure-controls button:hover {
+  background-color: #e8f0fe;
+  border-color: #1a73e8;
+  color: #1a73e8;
 }
 
 .input-panel .parser-section {
@@ -163,18 +187,225 @@ h1 {
   padding: 4px 0;
 }
 
-.input-panel .ksy-input {
-  margin: 0;
-  padding: 10px 15px;
-  border-radius: 0;
+/* 拡張子マッピング一覧 */
+.ext-mapping-list {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.ext-mapping-list summary {
+  cursor: pointer;
+  color: #1a73e8;
+  font-size: 11px;
+}
+
+.ext-mapping-list summary:hover {
+  text-decoration: underline;
+}
+
+#ext-mapping-list-content {
+  margin-top: 6px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.ext-mapping-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid #eee;
+  font-size: 11px;
+}
+
+.ext-mapping-ext {
+  font-weight: bold;
+  color: #333;
+  min-width: 50px;
+}
+
+.ext-mapping-arrow {
+  color: #888;
+  margin: 0 6px;
+}
+
+.ext-mapping-parser {
+  flex: 1;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ext-mapping-delete {
+  padding: 2px 6px;
+  font-size: 10px;
   border: none;
+  background: #f5f5f5;
+  color: #999;
+  cursor: pointer;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+
+.ext-mapping-delete:hover {
+  background: #ffebee;
+  color: #d32f2f;
+}
+
+.ext-mapping-empty {
+  color: #888;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* KSYエクスポート/インポート */
+.ksy-export-import {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.ksy-export-import summary {
+  cursor: pointer;
+  color: #1a73e8;
+  font-size: 11px;
+}
+
+.ksy-export-import summary:hover {
+  text-decoration: underline;
+}
+
+.ksy-export-import-content {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ksy-export-import-content button {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 11px;
+  border-radius: 4px;
+  border: 1px solid #1a73e8;
+  background-color: #fff;
+  color: #1a73e8;
+  cursor: pointer;
+}
+
+.ksy-export-import-content button:hover {
+  background-color: #1a73e8;
+  color: #fff;
+}
+
+/* KSYエディタ */
+.ksy-editor {
+  padding: 10px 15px;
   border-top: 1px solid #ddd;
-  max-width: none;
   background-color: #fafafa;
 }
 
-.input-panel #ksyText {
-  min-height: 120px;
+.ksy-editor > details > summary {
+  cursor: pointer;
+  color: #1a73e8;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.ksy-editor > details > summary:hover {
+  text-decoration: underline;
+}
+
+.ksy-editor-content {
+  margin-top: 10px;
+}
+
+.ksy-editor .ksy-file-row {
+  margin-bottom: 8px;
+}
+
+.ksy-editor .ksy-file-row label {
+  display: block;
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.ksy-editor .ksy-save-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.ksy-editor #ksy-save-name {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  color: #333;
+  font-size: 12px;
+}
+
+.ksy-editor #ksy-save-name:focus {
+  outline: none;
+  border-color: #1a73e8;
+}
+
+.ksy-editor #ksy-save-btn,
+.ksy-editor #ksy-delete-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid #1a73e8;
+  background-color: #fff;
+  color: #1a73e8;
+  cursor: pointer;
+}
+
+.ksy-editor #ksy-save-btn:hover {
+  background-color: #1a73e8;
+  color: #fff;
+}
+
+.ksy-editor #ksy-delete-btn:hover {
+  background-color: #d32f2f;
+  border-color: #d32f2f;
+  color: #fff;
+}
+
+.ksy-editor #ksyText {
+  width: 100%;
+  min-height: 150px;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  resize: vertical;
+  box-sizing: border-box;
+  background-color: #fff;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.ksy-editor #ksyText:focus {
+  outline: none;
+  border-color: #1a73e8;
+}
+
+.ksy-editor #ksy-apply-btn {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid #34a853;
+  background-color: #34a853;
+  color: #fff;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.ksy-editor #ksy-apply-btn:hover {
+  background-color: #2d8f47;
 }
 
 .input-panel .error-message {
