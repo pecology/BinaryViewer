@@ -5,6 +5,10 @@ import { parseKsySchema, parseBinary } from './ksy/DynamicParser.ts'
 import { saveKsy, loadKsy, deleteKsy, listKsyNames, hasKsy } from './ksyStorage.ts'
 import type { BinaryRange } from './BinaryRange.ts'
 
+// 現在読み込んでいるバイナリデータ
+let currentData: ArrayBuffer | null = null;
+let currentFileName: string = '';
+
 function chunk<T>(source: Iterable<T>, chunkSize: number): T[][] {
     const result: T[][] = [];
     let temp: T[] = [];
@@ -22,47 +26,129 @@ function chunk<T>(source: Iterable<T>, chunkSize: number): T[][] {
 }
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <div class="input">
-    <div class="input-row">
-        <input type="file" id="fileInput" />
-        <select id="parser-select">
-            <option value="zip">ZIP Parser</option>
-            <option value="text">Text Parser</option>
-            <option value="ksy">KSY (Custom Schema)</option>
-        </select>
-        <button id="load-button">Load File</button>
+  <div class="three-column-layout">
+    <div class="panel input-panel">
+      <h3>入力</h3>
+      <div id="drop-zone" class="drop-zone" tabindex="0">
+          <span class="drop-zone-text">ファイルをドラッグ＆ドロップ<br/>またはクリックで選択<br/>または Ctrl+V</span>
+          <input type="file" id="fileInput" />
+      </div>
+      <div id="current-file-name" class="current-file-name"></div>
+      <div class="parser-section">
+          <label>パーサー:</label>
+          <select id="parser-select">
+              <option value="zip">ZIP Parser</option>
+              <option value="text">Text Parser</option>
+              <option value="ksy">KSY (Custom Schema)</option>
+          </select>
+      </div>
+      <div id="ksy-input" class="ksy-input" style="display: none;">
+          <div class="ksy-storage-row">
+              <label>保存済み:</label>
+              <select id="ksy-saved-select">
+                  <option value="">-- 選択 --</option>
+              </select>
+              <button id="ksy-load-btn" title="読み込み">📂</button>
+              <button id="ksy-delete-btn" title="削除">🗑️</button>
+          </div>
+          <div class="ksy-file-row">
+              <label>ファイル:</label>
+              <input type="file" id="ksyFileInput" accept=".ksy,.yaml,.yml" />
+          </div>
+          <div class="ksy-save-row">
+              <input type="text" id="ksy-save-name" placeholder="スキーマ名" />
+              <button id="ksy-save-btn">💾</button>
+          </div>
+          <textarea id="ksyText" placeholder="meta:\n  id: my_format\n  endian: le\nseq:\n  - id: magic\n    type: u4"></textarea>
+      </div>
+      <div id="error-message" class="error-message"></div>
     </div>
-    <div id="ksy-input" class="ksy-input" style="display: none;">
-        <div class="ksy-storage-row">
-            <label>保存済みスキーマ:</label>
-            <select id="ksy-saved-select">
-                <option value="">-- 選択してください --</option>
-            </select>
-            <button id="ksy-load-btn" title="読み込み">📂</button>
-            <button id="ksy-delete-btn" title="削除">🗑️</button>
-        </div>
-        <div class="ksy-file-row">
-            <label for="ksyFileInput">ファイルから読み込み:</label>
-            <input type="file" id="ksyFileInput" accept=".ksy,.yaml,.yml" />
-        </div>
-        <div class="ksy-save-row">
-            <label for="ksy-save-name">名前を付けて保存:</label>
-            <input type="text" id="ksy-save-name" placeholder="スキーマ名" />
-            <button id="ksy-save-btn">💾 保存</button>
-        </div>
-        <span class="ksy-hint">スキーマ定義 (YAML):</span>
-        <textarea id="ksyText" placeholder="meta:\n  id: my_format\n  endian: le\nseq:\n  - id: magic\n    type: u4"></textarea>
+    <div class="panel hex-panel">
+      <h3>Hex</h3>
+      <div id="hex-table-control"></div>
+      <div id="hex-table"></div>
     </div>
-    <div id="error-message" class="error-message"></div>
+    <div class="panel structure-panel">
+      <h3>構造</h3>
+      <div class="details-wrapper"></div>
+    </div>
   </div>
 `;
 
-// パーサー選択時にKSY入力欄の表示を切り替え
+// パーサー選択時にKSY入力欄の表示を切り替え & 再パース
 document.querySelector<HTMLSelectElement>('#parser-select')!.addEventListener('change', (e) => {
     const select = e.target as HTMLSelectElement;
     const ksyInput = document.querySelector<HTMLDivElement>('#ksy-input')!;
     ksyInput.style.display = select.value === 'ksy' ? 'block' : 'none';
+    
+    // データがあれば再パース
+    if (currentData) {
+        parseAndDisplay();
+    }
 });
+
+// ファイル選択時に自動パース
+document.querySelector<HTMLInputElement>('#fileInput')!.addEventListener('change', async (e) => {
+    const input = e.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+        await loadFile(input.files[0]);
+    }
+});
+
+// ドロップゾーンのクリックでファイル選択
+document.querySelector<HTMLDivElement>('#drop-zone')!.addEventListener('click', () => {
+    document.querySelector<HTMLInputElement>('#fileInput')!.click();
+});
+
+// ドラッグ＆ドロップ対応
+const dropZone = document.querySelector<HTMLDivElement>('#drop-zone')!;
+
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+});
+
+dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('drag-over');
+});
+
+dropZone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    
+    if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        await loadFile(e.dataTransfer.files[0]);
+    }
+});
+
+// クリップボードからのペースト対応
+document.addEventListener('paste', async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    
+    for (const item of items) {
+        if (item.kind === 'file') {
+            const file = item.getAsFile();
+            if (file) {
+                await loadFile(file);
+                return;
+            }
+        }
+    }
+});
+
+// ファイルを読み込む共通関数
+async function loadFile(file: File): Promise<void> {
+    clearError();
+    try {
+        currentData = await file.arrayBuffer();
+        currentFileName = file.name;
+        document.querySelector<HTMLSpanElement>('#current-file-name')!.textContent = `📄 ${file.name}`;
+        await parseAndDisplay();
+    } catch (e) {
+        showError(`ファイル読み込みエラー: ${e instanceof Error ? e.message : String(e)}`);
+    }
+}
 
 // KSYファイル読み込み時にテキストエリアに反映
 document.querySelector<HTMLInputElement>('#ksyFileInput')!.addEventListener('change', async (e) => {
@@ -70,6 +156,10 @@ document.querySelector<HTMLInputElement>('#ksyFileInput')!.addEventListener('cha
     if (input.files && input.files.length > 0) {
         const text = await input.files[0].text();
         document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = text;
+        // KSYが変更されたら再パース
+        if (currentData) {
+            parseAndDisplay();
+        }
     }
 });
 
@@ -96,6 +186,10 @@ document.querySelector<HTMLButtonElement>('#ksy-load-btn')!.addEventListener('cl
     if (content) {
         document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = content;
         document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = name;
+        // KSYが変更されたら再パース
+        if (currentData) {
+            parseAndDisplay();
+        }
     }
 });
 
@@ -156,30 +250,25 @@ function clearError(): void {
     }
 }
 
-document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('click', async () => {
-    const fileInput = document.querySelector<HTMLInputElement>('#fileInput')!;
+// パースして表示する関数
+async function parseAndDisplay(): Promise<void> {
     const parserSelect = document.querySelector<HTMLSelectElement>('#parser-select')!;
     clearError();
     
-    // ファイル未選択チェック
-    if (!fileInput.files || fileInput.files.length === 0) {
-        showError('ファイルを選択してください');
+    if (!currentData) {
         return;
     }
     
-    const file = fileInput.files[0];
     const parserType = parserSelect.value;
     
     let parseResult: BinaryRange;
     try {
-        const data = await file.arrayBuffer();
-        
         switch (parserType) {
             case 'zip':
-                parseResult = ZipParser.parse(new Uint8Array(data));
+                parseResult = ZipParser.parse(new Uint8Array(currentData));
                 break;
             case 'text':
-                parseResult = TextParser.parse(new Uint8Array(data));
+                parseResult = TextParser.parse(new Uint8Array(currentData));
                 break;
             case 'ksy': {
                 const ksyText = document.querySelector<HTMLTextAreaElement>('#ksyText')!.value.trim();
@@ -188,7 +277,7 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
                     return;
                 }
                 const schema = parseKsySchema(ksyText);
-                const result = parseBinary(data, schema);
+                const result = parseBinary(currentData, schema);
                 if (result.warnings.length > 0) {
                     console.warn('Parse warnings:', result.warnings);
                 }
@@ -204,21 +293,11 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
         return;
     }
     
-    // document.querySelector<HTMLDivElement>('#app')!.insertAdjacentHTML("beforeend",`
-    document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-        <div id="output">
-            <div id="left" class = "col">
-                <div id="hex-table-control">
-                </div>
-                <div id="hex-table">
-                </div>
-            </div>
-            <div id="hex-structure" class="col">
-                <div class="details-wrapper">
-                </div>
-            </div>
-        </div>`;
-    
+    displayParseResult(parseResult);
+}
+
+// パース結果を表示する関数
+function displayParseResult(parseResult: BinaryRange): void {
     const pagingControl = 
     `
     <label for="paging-index-input">Offset</label>
@@ -335,7 +414,7 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
 
         // クリックした構造に対応する箇所に、テーブルのスクロールを合わせる
         [...document.querySelectorAll<HTMLTableCellElement>('#hex-table td')]
-            .find(td => parseInt(td.dataset.offset!) === offset)!.scrollIntoView(
+            .find(td => parseInt(td.dataset.offset!) === offset)?.scrollIntoView(
                 {
                     behavior: 'smooth', 
                     block: 'center'
@@ -374,7 +453,7 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
             );
 
     });
-});
+}
 
 const getRangeContainsList = (range: BinaryRange, offset: number, length: number = 1): BinaryRange[] =>
     range.contains(offset, length)

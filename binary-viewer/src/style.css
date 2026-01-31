@@ -3,9 +3,9 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color-scheme: light;
+  color: #333;
+  background-color: #ffffff;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -15,11 +15,11 @@
 
 a {
   font-weight: 500;
-  color: #646cff;
+  color: #1a73e8;
   text-decoration: inherit;
 }
 a:hover {
-  color: #535bf2;
+  color: #1557b0;
 }
 
 body {
@@ -28,9 +28,130 @@ body {
   min-height: 100vh;
 }
 
+#app {
+  height: 100vh;
+  overflow: hidden;
+}
+
 h1 {
   font-size: 3.2em;
   line-height: 1.1;
+}
+
+/* 3列レイアウト */
+.three-column-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr 1fr;
+  height: 100vh;
+  gap: 0;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid #ddd;
+}
+
+.panel:last-child {
+  border-right: none;
+}
+
+.panel h3 {
+  margin: 0;
+  padding: 10px 15px;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+  font-size: 14px;
+  color: #666;
+  flex-shrink: 0;
+}
+
+/* 入力パネル */
+.input-panel {
+  background-color: #fafafa;
+  overflow-y: auto;
+}
+
+.input-panel .drop-zone {
+  margin: 10px;
+  padding: 20px 15px;
+  min-width: auto;
+}
+
+.input-panel .drop-zone-text {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.input-panel .current-file-name {
+  padding: 0 15px 10px;
+  font-size: 13px;
+}
+
+.input-panel .parser-section {
+  padding: 10px 15px;
+  border-top: 1px solid #ddd;
+}
+
+.input-panel .parser-section label {
+  display: block;
+  margin-bottom: 5px;
+  color: #666;
+  font-size: 12px;
+}
+
+.input-panel #parser-select {
+  width: 100%;
+}
+
+.input-panel .ksy-input {
+  margin: 0;
+  padding: 10px 15px;
+  border-radius: 0;
+  border: none;
+  border-top: 1px solid #ddd;
+  max-width: none;
+  background-color: #fafafa;
+}
+
+.input-panel #ksyText {
+  min-height: 120px;
+}
+
+.input-panel .error-message {
+  margin: 10px 15px;
+  max-width: none;
+}
+
+/* Hexパネル */
+.hex-panel {
+  background-color: #fff;
+}
+
+.hex-panel #hex-table-control {
+  padding: 8px 15px;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.hex-panel #hex-table {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+/* 構造パネル */
+.structure-panel {
+  background-color: #fff;
+}
+
+.structure-panel .details-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
 }
 
 .input {
@@ -43,9 +164,9 @@ h1 {
 
 .error-message {
   display: none;
-  color: #ff6b6b;
-  background-color: #2d1f1f;
-  border: 1px solid #ff6b6b;
+  color: #d32f2f;
+  background-color: #ffebee;
+  border: 1px solid #ef9a9a;
   border-radius: 4px;
   padding: 10px 20px;
   margin-top: 15px;
@@ -62,26 +183,76 @@ h1 {
   margin-bottom: 10px;
 }
 
+.drop-zone {
+  border: 2px dashed #1a73e8;
+  border-radius: 8px;
+  padding: 30px 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: #fff;
+  min-width: 300px;
+}
+
+.drop-zone:hover,
+.drop-zone:focus {
+  border-color: #1557b0;
+  background-color: #e8f0fe;
+}
+
+.drop-zone.drag-over {
+  border-color: #34a853;
+  background-color: #e6f4ea;
+}
+
+.drop-zone-text {
+  color: #666;
+  font-size: 14px;
+}
+
+.drop-zone #fileInput {
+  display: none;
+}
+
+.parser-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.parser-row label {
+  color: #666;
+  font-size: 14px;
+}
+
+.current-file-name {
+  color: #1a73e8;
+  font-size: 14px;
+  font-weight: bold;
+}
+
 #parser-select {
   padding: 6px 12px;
   font-size: 14px;
   border-radius: 4px;
-  border: 1px solid #646cff;
-  background-color: #1a1a1a;
-  color: #fff;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  color: #333;
   cursor: pointer;
 }
 
 #parser-select:hover {
-  border-color: #535bf2;
+  border-color: #1a73e8;
 }
 
 .ksy-input {
   margin-top: 15px;
   padding: 15px;
-  background-color: #2a2a2a;
+  background-color: #fafafa;
   border-radius: 8px;
-  border: 1px solid #444;
+  border: 1px solid #ddd;
   max-width: 600px;
   margin-left: auto;
   margin-right: auto;
@@ -91,13 +262,13 @@ h1 {
   display: inline-block;
   margin-bottom: 8px;
   font-weight: bold;
-  color: #fff;
+  color: #333;
 }
 
 .ksy-input .ksy-hint {
   display: block;
   margin: 10px 0 6px;
-  color: #888;
+  color: #666;
   font-size: 12px;
 }
 
@@ -106,58 +277,63 @@ h1 {
 .ksy-save-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 6px;
+  margin-bottom: 8px;
   flex-wrap: wrap;
 }
 
 .ksy-storage-row label,
 .ksy-file-row label,
 .ksy-save-row label {
-  min-width: 140px;
+  min-width: auto;
+  font-size: 12px;
+  color: #666;
 }
 
 #ksy-saved-select {
   flex: 1;
-  max-width: 200px;
-  padding: 6px 10px;
+  max-width: none;
+  padding: 4px 8px;
   border-radius: 4px;
-  border: 1px solid #555;
-  background-color: #1a1a1a;
-  color: #e0e0e0;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  color: #333;
+  font-size: 12px;
 }
 
 #ksy-save-name {
   flex: 1;
-  max-width: 200px;
-  padding: 6px 10px;
+  max-width: none;
+  padding: 4px 8px;
   border-radius: 4px;
-  border: 1px solid #555;
-  background-color: #1a1a1a;
-  color: #e0e0e0;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  color: #333;
+  font-size: 12px;
 }
 
 #ksy-save-name:focus,
 #ksy-saved-select:focus {
   outline: none;
-  border-color: #646cff;
+  border-color: #1a73e8;
 }
 
 #ksy-load-btn,
 #ksy-delete-btn,
 #ksy-save-btn {
-  padding: 6px 12px;
+  padding: 4px 8px;
   border-radius: 4px;
-  border: 1px solid #646cff;
-  background-color: #1a1a1a;
-  color: #fff;
+  border: 1px solid #1a73e8;
+  background-color: #fff;
+  color: #1a73e8;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
 }
 
 #ksy-load-btn:hover,
 #ksy-save-btn:hover {
-  background-color: #646cff;
+  background-color: #1a73e8;
+  color: #fff;
 }
 
 #ksy-delete-btn:hover {
@@ -171,17 +347,17 @@ h1 {
   font-family: monospace;
   font-size: 12px;
   padding: 10px;
-  border: 1px solid #555;
+  border: 1px solid #ccc;
   border-radius: 4px;
   resize: vertical;
   box-sizing: border-box;
-  background-color: #1a1a1a;
-  color: #e0e0e0;
+  background-color: #fff;
+  color: #333;
 }
 
 #ksyText:focus {
   outline: none;
-  border-color: #646cff;
+  border-color: #1a73e8;
 }
 
 #fileInput {
@@ -214,68 +390,59 @@ h1 {
   overflow-y: scroll;
 }
 
-#hex-table table,th,td {
-  border:1px solid
+#hex-table table, th, td {
+  border: 1px solid #ccc;
 }
 
 details > details {
-    margin-left: 1rem;
+  margin-left: 1rem;
 }
 
-
+/* ハイライト色（明るいテーマ用） */
 *[data-highlight="1"] {
-  background-color: #ffdbdb;
+  background-color: #ffebee;
 }
 
 *[data-highlight="2"] {
-  background-color: #ffb0b0;
+  background-color: #ffcdd2;
 }
 
 *[data-highlight="3"] {
-  background-color: #fe9a9a;
+  background-color: #ef9a9a;
 }
 
 *[data-highlight="4"] {
-  background-color: #2bff003a;
+  background-color: #e8f5e9;
 }
 
 *[data-highlight="5"] {
-  background-color: #00ff733a;
+  background-color: #c8e6c9;
 }
 
 *[data-highlight="6"] {
-  background-color: #00e5ff3a;
+  background-color: #e3f2fd;
 }
 
 *[data-highlight="7"] {
-  background-color: #0033ff3a;
+  background-color: #bbdefb;
 }
 
 *[data-highlight="8"] {
-  background-color: #3c00ff3a;
+  background-color: #f3e5f5;
 }
 
 *[data-highlight="9"] {
-  background-color: #9000ff3a;
+  background-color: #e1bee7;
 }
 
 *[data-highlight="10"] {
-  background-color: #ff00f23a;
+  background-color: #fff3e0;
 }
 
 thead th {
   position: sticky;
   top: 0;
-  background: #8fff94;
+  background: #4caf50;
+  color: #fff;
   z-index: 3;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  .error-message {
-    background-color: #fff0f0;
-  }
 }
