@@ -24,21 +24,48 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <input type="file" id="fileInput" />
         <button id="load-button">Load File</button>
     </div>
+    <div id="error-message" class="error-message"></div>
   </div>
 `;
 
+// エラーメッセージを表示する関数
+function showError(message: string): void {
+    const errorDiv = document.querySelector<HTMLDivElement>('#error-message');
+    if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+    }
+}
+
+// エラーメッセージをクリアする関数
+function clearError(): void {
+    const errorDiv = document.querySelector<HTMLDivElement>('#error-message');
+    if (errorDiv) {
+        errorDiv.textContent = '';
+        errorDiv.style.display = 'none';
+    }
+}
+
 document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('click', async () => {
     const fileInput = document.querySelector<HTMLInputElement>('#fileInput')!;
+    clearError();
     
     // ファイル未選択チェック
     if (!fileInput.files || fileInput.files.length === 0) {
-        alert('ファイルを選択してください');
+        showError('ファイルを選択してください');
         return;
     }
     
     const file = fileInput.files[0];
-    const data = await file.arrayBuffer();
-    const parseResult = ZipParser.parse(new Uint8Array(data));
+    
+    let parseResult: BinaryRange;
+    try {
+        const data = await file.arrayBuffer();
+        parseResult = ZipParser.parse(new Uint8Array(data));
+    } catch (e) {
+        showError(`パースエラー: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+    }
     
     // document.querySelector<HTMLDivElement>('#app')!.insertAdjacentHTML("beforeend",`
     document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -181,8 +208,14 @@ document.querySelector<HTMLButtonElement>('#load-button')!.addEventListener('cli
 
     document.querySelector<HTMLElement>('#hex-table')!.addEventListener('click', (e) => {
         // テーブルをクリックしたときも同様に色付けする
-        const td = e.target as HTMLTableCellElement;
-        const offset = parseInt(td.dataset.offset!);
+        const target = e.target as HTMLElement;
+        
+        // td以外（th等）をクリックした場合は無視
+        if (target.tagName !== 'TD' || !target.dataset.offset) {
+            return;
+        }
+        
+        const offset = parseInt(target.dataset.offset);
 
         // ハイライト対象のRangeを取得
         const highlightRangeList: BinaryRange[] = getRangeContainsList(parseResult, offset);

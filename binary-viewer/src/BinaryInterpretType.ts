@@ -46,38 +46,52 @@ export class Int32LEHex implements BinaryInterpretType {
     }
 }
 
+// エンコーディング名の正規化ヘルパー
+function getEncodingDisplayName(encoding: string): string {
+    switch (encoding.toLowerCase()) {
+        case "ascii": return "Ascii";
+        case "sjis": return "ShiftJis";
+        case "shift-jis": return "ShiftJis";
+        case "utf-8": return "UTF-8";
+        case "other": return "Binary";
+        default: return encoding;
+    }
+}
+
+function getTextDecoderEncoding(encoding: string): string | null {
+    switch (encoding.toLowerCase()) {
+        case "ascii": return "ascii";
+        case "sjis": return "shift_jis";
+        case "shift-jis": return "shift_jis";
+        case "utf-8": return "utf-8";
+        case "other": return null;
+        default: return null;
+    }
+}
+
+function decodeBytesOrBinary(bytes: Uint8Array, encoding: string): string {
+    const decoderEncoding = getTextDecoderEncoding(encoding);
+    if (decoderEncoding === null) {
+        // バイナリ表示
+        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+    }
+    return new TextDecoder(decoderEncoding).decode(bytes);
+}
+
 export class CharEncoding implements BinaryInterpretType {
     private encoding: string;
     constructor(encoding: string) {
         this.encoding = encoding;
     }
     toString(): string {
-        switch (this.encoding.toLowerCase()) {
-            case "ascii": return "Ascii";
-            case "sjis": return "ShiftJis";
-            case "shift-jis": return "ShiftJis";
-            case "utf-8": return "UTF-8";
-            case "other": return "Binary";
-            default: return this.encoding;
-        }
-    }
-    private getTextDecoderEncoding(): string | null {
-        switch (this.encoding.toLowerCase()) {
-            case "ascii": return "ascii";
-            case "sjis": return "shift_jis";
-            case "shift-jis": return "shift_jis";
-            case "utf-8": return "utf-8";
-            case "other": return null;
-            default: return null;
-        }
+        return getEncodingDisplayName(this.encoding);
     }
     interpret(bytes: Uint8Array): string {
-        const decoderEncoding = this.getTextDecoderEncoding();
-        if (decoderEncoding === null) {
-            // バイナリ表示
-            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        const decoded = decodeBytesOrBinary(bytes, this.encoding);
+        // バイナリ表示の場合は不可視文字変換をスキップ
+        if (getTextDecoderEncoding(this.encoding) === null) {
+            return decoded;
         }
-        const decoded = new TextDecoder(decoderEncoding).decode(bytes);
         // 不可視文字を可視化
         return decoded
             .replace(/ /g, "(half space)")
@@ -93,33 +107,10 @@ export class TextEncoding implements BinaryInterpretType {
         this.encoding = encoding;
     }
     toString(): string {
-        switch (this.encoding.toLowerCase()) {
-            case "ascii": return "Ascii";
-            case "sjis": return "ShiftJis";
-            case "shift-jis": return "ShiftJis";
-            case "utf-8": return "UTF-8";
-            case "other": return "Binary";
-            default: return this.encoding;
-        }
-    }
-    private getTextDecoderEncoding(): string | null {
-        switch (this.encoding.toLowerCase()) {
-            case "ascii": return "ascii";
-            case "sjis": return "shift_jis";
-            case "shift-jis": return "shift_jis";
-            case "utf-8": return "utf-8";
-            case "other": return null;
-            default: return null;
-        }
+        return getEncodingDisplayName(this.encoding);
     }
     interpret(bytes: Uint8Array): string {
-        const decoderEncoding = this.getTextDecoderEncoding();
-        if (decoderEncoding === null) {
-            // バイナリ表示
-            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
-        }
-        const decoded = new TextDecoder(decoderEncoding).decode(bytes);
-        return decoded;
+        return decodeBytesOrBinary(bytes, this.encoding);
     }
 }
 
