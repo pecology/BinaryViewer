@@ -2,6 +2,7 @@ import './style.css'
 import { ZipParser } from './zipParser.ts'
 import { TextParser } from './textParser.ts'
 import { parseKsySchema, parseBinary } from './ksy/DynamicParser.ts'
+import { saveKsy, loadKsy, deleteKsy, listKsyNames, hasKsy } from './ksyStorage.ts'
 import type { BinaryRange } from './BinaryRange.ts'
 
 function chunk<T>(source: Iterable<T>, chunkSize: number): T[][] {
@@ -32,9 +33,24 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <button id="load-button">Load File</button>
     </div>
     <div id="ksy-input" class="ksy-input" style="display: none;">
-        <label for="ksyFileInput">KSY Schema File:</label>
-        <input type="file" id="ksyFileInput" accept=".ksy,.yaml,.yml" />
-        <span class="ksy-hint">または下のテキストエリアに直接入力</span>
+        <div class="ksy-storage-row">
+            <label>保存済みスキーマ:</label>
+            <select id="ksy-saved-select">
+                <option value="">-- 選択してください --</option>
+            </select>
+            <button id="ksy-load-btn" title="読み込み">📂</button>
+            <button id="ksy-delete-btn" title="削除">🗑️</button>
+        </div>
+        <div class="ksy-file-row">
+            <label for="ksyFileInput">ファイルから読み込み:</label>
+            <input type="file" id="ksyFileInput" accept=".ksy,.yaml,.yml" />
+        </div>
+        <div class="ksy-save-row">
+            <label for="ksy-save-name">名前を付けて保存:</label>
+            <input type="text" id="ksy-save-name" placeholder="スキーマ名" />
+            <button id="ksy-save-btn">💾 保存</button>
+        </div>
+        <span class="ksy-hint">スキーマ定義 (YAML):</span>
         <textarea id="ksyText" placeholder="meta:\n  id: my_format\n  endian: le\nseq:\n  - id: magic\n    type: u4"></textarea>
     </div>
     <div id="error-message" class="error-message"></div>
@@ -55,6 +71,71 @@ document.querySelector<HTMLInputElement>('#ksyFileInput')!.addEventListener('cha
         const text = await input.files[0].text();
         document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = text;
     }
+});
+
+// 保存済みKSY一覧を更新
+function updateKsySavedList(): void {
+    const select = document.querySelector<HTMLSelectElement>('#ksy-saved-select')!;
+    const names = listKsyNames();
+    select.innerHTML = '<option value="">-- 選択してください --</option>' +
+        names.map(name => `<option value="${name}">${name}</option>`).join('');
+}
+
+// 初期化時に一覧を更新
+updateKsySavedList();
+
+// 保存済みKSYを読み込み
+document.querySelector<HTMLButtonElement>('#ksy-load-btn')!.addEventListener('click', () => {
+    const select = document.querySelector<HTMLSelectElement>('#ksy-saved-select')!;
+    const name = select.value;
+    if (!name) {
+        alert('スキーマを選択してください');
+        return;
+    }
+    const content = loadKsy(name);
+    if (content) {
+        document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = content;
+        document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = name;
+    }
+});
+
+// 保存済みKSYを削除
+document.querySelector<HTMLButtonElement>('#ksy-delete-btn')!.addEventListener('click', () => {
+    const select = document.querySelector<HTMLSelectElement>('#ksy-saved-select')!;
+    const name = select.value;
+    if (!name) {
+        alert('削除するスキーマを選択してください');
+        return;
+    }
+    if (confirm(`"${name}" を削除しますか？`)) {
+        deleteKsy(name);
+        updateKsySavedList();
+    }
+});
+
+// KSYを保存
+document.querySelector<HTMLButtonElement>('#ksy-save-btn')!.addEventListener('click', () => {
+    const nameInput = document.querySelector<HTMLInputElement>('#ksy-save-name')!;
+    const textArea = document.querySelector<HTMLTextAreaElement>('#ksyText')!;
+    const name = nameInput.value.trim();
+    const content = textArea.value.trim();
+    
+    if (!name) {
+        alert('スキーマ名を入力してください');
+        return;
+    }
+    if (!content) {
+        alert('スキーマ定義を入力してください');
+        return;
+    }
+    
+    if (hasKsy(name) && !confirm(`"${name}" は既に存在します。上書きしますか？`)) {
+        return;
+    }
+    
+    saveKsy(name, content);
+    updateKsySavedList();
+    alert(`"${name}" を保存しました`);
 });
 
 // エラーメッセージを表示する関数

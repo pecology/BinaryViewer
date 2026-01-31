@@ -88,7 +88,7 @@ h1 {
 }
 
 .ksy-input label {
-  display: block;
+  display: inline-block;
   margin-bottom: 8px;
   font-weight: bold;
   color: #fff;
@@ -99,6 +99,70 @@ h1 {
   margin: 10px 0 6px;
   color: #888;
   font-size: 12px;
+}
+
+.ksy-storage-row,
+.ksy-file-row,
+.ksy-save-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.ksy-storage-row label,
+.ksy-file-row label,
+.ksy-save-row label {
+  min-width: 140px;
+}
+
+#ksy-saved-select {
+  flex: 1;
+  max-width: 200px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid #555;
+  background-color: #1a1a1a;
+  color: #e0e0e0;
+}
+
+#ksy-save-name {
+  flex: 1;
+  max-width: 200px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid #555;
+  background-color: #1a1a1a;
+  color: #e0e0e0;
+}
+
+#ksy-save-name:focus,
+#ksy-saved-select:focus {
+  outline: none;
+  border-color: #646cff;
+}
+
+#ksy-load-btn,
+#ksy-delete-btn,
+#ksy-save-btn {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid #646cff;
+  background-color: #1a1a1a;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+#ksy-load-btn:hover,
+#ksy-save-btn:hover {
+  background-color: #646cff;
+}
+
+#ksy-delete-btn:hover {
+  background-color: #d32f2f;
+  border-color: #d32f2f;
 }
 
 #ksyText {
