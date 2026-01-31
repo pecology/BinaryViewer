@@ -9,6 +9,8 @@ import type { BinaryRange } from './BinaryRange.ts'
 // 現在読み込んでいるバイナリデータ
 let currentData: ArrayBuffer | null = null;
 let currentFileName: string = '';
+// 編集可能なバイナリデータ（Uint8Arrayで直接編集可能）
+let editableData: Uint8Array | null = null;
 
 function chunk<T>(source: Iterable<T>, chunkSize: number): T[][] {
     const result: T[][] = [];
@@ -35,6 +37,9 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <input type="file" id="fileInput" />
       </div>
       <div id="current-file-name" class="current-file-name"></div>
+      <div class="download-section">
+          <button id="download-btn" disabled>💾 ダウンロード</button>
+      </div>
       <div class="parser-section">
           <label>パーサー:</label>
           <select id="parser-select">
@@ -67,7 +72,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div id="error-message" class="error-message"></div>
     </div>
     <div class="panel hex-panel">
-      <h3>Hex</h3>
+      <h3>Hex <span id="edit-hint" class="edit-hint">(ダブルクリックで編集)</span></h3>
       <div id="hex-table-control"></div>
       <div id="hex-table"></div>
     </div>
@@ -205,7 +210,11 @@ async function loadFile(file: File): Promise<void> {
     try {
         currentData = await file.arrayBuffer();
         currentFileName = file.name;
+        // 編集可能なUint8Arrayを作成
+        editableData = new Uint8Array(currentData.slice(0));
+        
         document.querySelector<HTMLSpanElement>('#current-file-name')!.textContent = `📄 ${file.name}`;
+        document.querySelector<HTMLButtonElement>('#download-btn')!.disabled = false;
         
         // 拡張子に基づいてパーサーを自動選択
         const ext = getExtensionFromFileName(file.name);
@@ -236,6 +245,24 @@ document.querySelector<HTMLButtonElement>('#link-ext-btn')!.addEventListener('cl
     saveExtensionMapping(ext, parserValue);
     updateExtMappingInfo();
     alert(`拡張子 "${ext}" を "${parserValue}" に紐づけました`);
+});
+
+// ダウンロードボタン
+document.querySelector<HTMLButtonElement>('#download-btn')!.addEventListener('click', () => {
+    if (!editableData || !currentFileName) {
+        alert('ファイルが読み込まれていません');
+        return;
+    }
+    
+    const blob = new Blob([new Uint8Array(editableData)], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = currentFileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 });
 
 // KSYファイル読み込み時にテキストエリアに反映
@@ -384,6 +411,61 @@ async function parseAndDisplay(): Promise<void> {
     displayParseResult(parseResult);
 }
 
+// アコーディオン（details）の開閉状態を保存
+function saveAccordionState(): Set<string> {
+    const openOffsets = new Set<string>();
+    document.querySelectorAll<HTMLDetailsElement>('.details-wrapper details[open]').forEach(details => {
+        const offset = details.dataset.offset;
+        const length = details.dataset.length;
+        if (offset !== undefined && length !== undefined) {
+            openOffsets.add(`${offset}-${length}`);
+        }
+    });
+    return openOffsets;
+}
+
+// アコーディオン（details）の開閉状態を復元
+function restoreAccordionState(openOffsets: Set<string>): void {
+    document.querySelectorAll<HTMLDetailsElement>('.details-wrapper details').forEach(details => {
+        const offset = details.dataset.offset;
+        const length = details.dataset.length;
+        if (offset !== undefined && length !== undefined) {
+            const key = `${offset}-${length}`;
+            if (openOffsets.has(key)) {
+                details.open = true;
+            }
+        }
+    });
+}
+
+// 編集後の再パース（アコーディオン状態を保持）
+async function reparseAfterEdit(): Promise<void> {
+    if (!editableData || !currentData) return;
+    
+    // アコーディオン状態を保存
+    const accordionState = saveAccordionState();
+    
+    // 現在のページインデックスを保存
+    const pagingInput = document.querySelector<HTMLInputElement>('#paging-index-input');
+    const currentPageIndex = pagingInput ? parseInt(pagingInput.value) || 0 : 0;
+    
+    // editableDataを元にcurrentDataを更新（ArrayBufferとして新しいコピーを作成）
+    currentData = new Uint8Array(editableData).buffer;
+    
+    // 再パース
+    await parseAndDisplay();
+    
+    // ページインデックスを復元
+    const newPagingInput = document.querySelector<HTMLInputElement>('#paging-index-input');
+    if (newPagingInput && currentPageIndex > 0) {
+        newPagingInput.value = currentPageIndex.toString();
+        newPagingInput.dispatchEvent(new Event('input'));
+    }
+    
+    // アコーディオン状態を復元
+    restoreAccordionState(accordionState);
+}
+
 // パース結果を表示する関数
 function displayParseResult(parseResult: BinaryRange): void {
     const pagingControl = 
@@ -467,7 +549,37 @@ function displayParseResult(parseResult: BinaryRange): void {
         // TODO同じように各矢印のキーイベントを自然に実装する
     });
 
-
+    // 構造パネルのダブルクリック編集機能
+    document.querySelector<HTMLElement>('.details-wrapper > details')!.addEventListener('dblclick', (e) => {
+        const target = e.target as HTMLElement;
+        
+        // details要素（またはその中のsummary）をダブルクリックした場合
+        const detailsElement = target.closest("[data-offset]") as HTMLElement;
+        if (!detailsElement) return;
+        
+        const offset = parseInt(detailsElement.dataset.offset!);
+        
+        // Hexテーブルの該当ページに移動
+        const nowPagingIndex = parseInt((document.querySelector("#paging-index-input") as HTMLInputElement).value);
+        const targetPageIndex = Math.floor(offset / 1024);
+        if (nowPagingIndex !== targetPageIndex) {
+            document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(parseResult, targetPageIndex);
+            document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${targetPageIndex * 1024} ~ ${(targetPageIndex + 1) * 1024 - 1}byte)`;
+            document.querySelector<HTMLInputElement>('#paging-index-input')!.value = targetPageIndex.toString();
+        }
+        
+        // 少し遅延させてからHexテーブルの該当セルの編集を開始
+        setTimeout(() => {
+            const targetTd = document.querySelector<HTMLTableCellElement>(`#hex-table td[data-offset="${offset}"]`);
+            if (targetTd) {
+                targetTd.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // さらに少し遅延させてから編集開始
+                setTimeout(() => {
+                    targetTd.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+                }, 100);
+            }
+        }, 50);
+    });
 
     document.querySelector<HTMLElement>('.details-wrapper > details')!.addEventListener('click', (e) => {
         console.log(e.target);
@@ -514,8 +626,8 @@ function displayParseResult(parseResult: BinaryRange): void {
         // テーブルをクリックしたときも同様に色付けする
         const target = e.target as HTMLElement;
         
-        // td以外（th等）をクリックした場合は無視
-        if (target.tagName !== 'TD' || !target.dataset.offset) {
+        // td以外（th等）をクリックした場合は無視、編集中のinputも無視
+        if (target.tagName !== 'TD' || !target.dataset.offset || target.querySelector('input')) {
             return;
         }
         
@@ -540,6 +652,143 @@ function displayParseResult(parseResult: BinaryRange): void {
                 }
             );
 
+    });
+
+    // Hexテーブルのダブルクリック編集機能
+    document.querySelector<HTMLElement>('#hex-table')!.addEventListener('dblclick', (e) => {
+        const target = e.target as HTMLElement;
+        
+        // td以外（th等）をダブルクリックした場合は無視
+        if (target.tagName !== 'TD' || !target.dataset.offset) {
+            return;
+        }
+        
+        // 既に編集中の場合は無視
+        if (target.querySelector('input')) {
+            return;
+        }
+        
+        const offset = parseInt(target.dataset.offset);
+        const originalValue = target.textContent?.trim() || '00';
+        
+        // インライン入力フィールドを作成
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = originalValue;
+        input.maxLength = 2;
+        input.className = 'hex-edit-input';
+        input.style.width = '2ch';
+        input.style.textAlign = 'center';
+        input.style.fontFamily = 'monospace';
+        input.style.border = '1px solid #1a73e8';
+        input.style.borderRadius = '2px';
+        input.style.padding = '0';
+        input.style.margin = '0';
+        input.style.fontSize = 'inherit';
+        input.style.textTransform = 'uppercase';
+        
+        target.textContent = '';
+        target.appendChild(input);
+        input.focus();
+        input.select();
+        
+        const commitEdit = (newValue: string) => {
+            const hex = newValue.toUpperCase().padStart(2, '0');
+            // 16進数として有効かチェック
+            if (!/^[0-9A-F]{1,2}$/i.test(newValue)) {
+                // 無効な値の場合は元に戻す
+                target.textContent = originalValue;
+                return;
+            }
+            
+            const byteValue = parseInt(hex, 16);
+            if (byteValue < 0 || byteValue > 255) {
+                target.textContent = originalValue;
+                return;
+            }
+            
+            // editableDataを更新
+            if (editableData) {
+                editableData[offset] = byteValue;
+            }
+            
+            target.textContent = hex;
+            
+            // 値が変更された場合は再パースをスケジュール（連続編集中は遅延）
+            if (hex !== originalValue) {
+                return true; // 変更あり
+            }
+            return false; // 変更なし
+        };
+        
+        const cancelEdit = () => {
+            target.textContent = originalValue;
+        };
+        
+        // 編集終了時に再パースを実行するフラグ
+        let shouldReparse = false;
+        let isMovingToNext = false;
+        
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                const changed = commitEdit(input.value);
+                if (changed) shouldReparse = true;
+                
+                // Tab/Enterで次のセルに移動して編集
+                isMovingToNext = true;
+                const nextOffset = offset + 1;
+                const nextTd = document.querySelector<HTMLTableCellElement>(`#hex-table td[data-offset="${nextOffset}"]`);
+                if (nextTd) {
+                    // 次のセルをダブルクリックしたように編集を開始
+                    nextTd.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+                } else {
+                    // 次のセルがない場合は再パース実行
+                    if (shouldReparse) {
+                        reparseAfterEdit();
+                    }
+                }
+            } else if (e.key === 'Escape') {
+                cancelEdit();
+                // Escapeで編集終了時は再パース実行
+                if (shouldReparse) {
+                    reparseAfterEdit();
+                }
+            }
+        });
+        
+        input.addEventListener('blur', () => {
+            // blurで確定（他の場所をクリックした場合）
+            if (target.contains(input)) {
+                const changed = commitEdit(input.value);
+                if (changed) shouldReparse = true;
+                
+                // 次のセルへの移動ではない場合のみ再パース
+                if (!isMovingToNext && shouldReparse) {
+                    reparseAfterEdit();
+                }
+            }
+        });
+        
+        // 2文字入力されたら自動的に次へ
+        input.addEventListener('input', () => {
+            if (input.value.length >= 2 && /^[0-9A-Fa-f]{2}$/.test(input.value)) {
+                const changed = commitEdit(input.value);
+                if (changed) shouldReparse = true;
+                
+                isMovingToNext = true;
+                const nextOffset = offset + 1;
+                const nextTd = document.querySelector<HTMLTableCellElement>(`#hex-table td[data-offset="${nextOffset}"]`);
+                if (nextTd) {
+                    nextTd.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+                } else {
+                    // 次のセルがない場合は再パース実行
+                    if (shouldReparse) {
+                        reparseAfterEdit();
+                    }
+                }
+            }
+        });
     });
 }
 

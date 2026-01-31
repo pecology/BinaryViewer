@@ -89,6 +89,40 @@ h1 {
   font-size: 13px;
 }
 
+/* ダウンロードセクション */
+.download-section {
+  padding: 0 15px 10px;
+}
+
+#download-btn {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  border: 1px solid #34a853;
+  background-color: #34a853;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+#download-btn:hover:not(:disabled) {
+  background-color: #2d8f47;
+}
+
+#download-btn:disabled {
+  background-color: #ccc;
+  border-color: #ccc;
+  cursor: not-allowed;
+}
+
+/* 編集ヒント */
+.edit-hint {
+  font-size: 11px;
+  color: #888;
+  font-weight: normal;
+}
+
 .input-panel .parser-section {
   padding: 10px 15px;
   border-top: 1px solid #ddd;
