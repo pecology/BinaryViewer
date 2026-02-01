@@ -1,9 +1,8 @@
 import './style.css'
-import { ZipParser } from './zipParser.ts'
-import { TextParser } from './textParser.ts'
 import { parseKsySchema, parseBinary } from './ksy/DynamicParser.ts'
 import { saveKsy, loadKsy, deleteKsy, listKsyNames, hasKsy, exportAllKsy, importKsy } from './ksyStorage.ts'
 import { saveExtensionMapping, getParserForExtension, getExtensionFromFileName, getAllExtensionMappings, removeExtensionMapping, type ParserType } from './extensionMapping.ts'
+import { getBuiltinParsers, getBuiltinParser } from './parserRegistry.ts'
 import type { BinaryRange } from './BinaryRange.ts'
 
 // 現在読み込んでいるバイナリデータ
@@ -131,11 +130,11 @@ function updateParserSelect(selectedValue?: string): void {
     const select = document.querySelector<HTMLSelectElement>('#parser-select')!;
     const currentValue = selectedValue ?? select.value;
     
-    // 組み込みパーサー
+    // 組み込みパーサー（レジストリから動的に生成）
+    const builtinParsers = getBuiltinParsers();
     let html = `
         <optgroup label="組み込みパーサー">
-            <option value="zip">ZIP Parser</option>
-            <option value="text">Text Parser</option>
+            ${builtinParsers.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
         </optgroup>
     `;
     
@@ -676,10 +675,10 @@ async function parseAndDisplay(): Promise<void> {
     
     let parseResult: BinaryRange;
     try {
-        if (parserType === 'zip') {
-            parseResult = ZipParser.parse(new Uint8Array(currentData));
-        } else if (parserType === 'text') {
-            parseResult = TextParser.parse(new Uint8Array(currentData));
+        // 組み込みパーサーをチェック
+        const builtinParser = getBuiltinParser(parserType);
+        if (builtinParser) {
+            parseResult = builtinParser.parse(new Uint8Array(currentData));
         } else if (parserType.startsWith('ksy:')) {
             // 保存済みKSYスキーマを使用
             const ksyName = parserType.substring(4);
