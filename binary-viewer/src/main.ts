@@ -94,7 +94,25 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </div>
 `;
 
-// パーサーセレクトを更新する関数
+/**
+ * パーサー選択ドロップダウンの内容を再構築する関数
+ * 
+ * 組み込みパーサーとlocalStorageに保存されたKSYスキーマを
+ * optgroup付きで一覧表示する。
+ * 
+ * @param selectedValue - 選択状態にしたいパーサーの値（例: "zip", "ksy:myschema"）
+ *                        指定した場合: そのパーサーを選択状態にする
+ *                        省略した場合: 現在選択中のパーサーを維持する
+ *                        （ただし、該当するoptionが存在しない場合は先頭が選択される）
+ * 
+ * @example
+ * // KSYスキーマを保存した後に呼び出し（新しいスキーマを選択状態に）
+ * updateParserSelect('ksy:newSchema');
+ * 
+ * @example
+ * // KSYスキーマを削除した後に呼び出し（現在の選択を維持、なければ先頭）
+ * updateParserSelect();
+ */
 function updateParserSelect(selectedValue?: string): void {
     const select = document.querySelector<HTMLSelectElement>('#parser-select')!;
     const currentValue = selectedValue ?? select.value;

@@ -1,5 +1,7 @@
 TODO
 
+プッシュ時に、github actionで自動ビルド＋pagesに展開
+
 === 優先度高（バグ・クラッシュの原因） ===
 [x] TextDecoder に無効なエンコーディング ("sjis", "other") を渡すとエラーになる
 [x] readUInt32LE の符号問題（2GB以上のファイルで負の値になる）
