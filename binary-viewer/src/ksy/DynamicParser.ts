@@ -13,8 +13,11 @@ import type {
 } from './KsySchema';
 import {
     parsePrimitiveType,
-    isStringType,
     isUserDefinedType,
+    isStringField,
+    isContentsField,
+    isArrayField,
+    getRepeatExpr,
 } from './KsySchema';
 import { parseYaml } from './YamlParser';
 import type { YamlObject, YamlValue } from './YamlParser';
@@ -131,43 +134,75 @@ function convertToKsyField(obj: YamlValue): KsyField {
         throw new Error(`Field type is required for field "${id}"`);
     }
 
-    const field: KsyField = {
-        id,
-        type,
-    };
-
-    // オプションフィールド
-    const size = fieldObj['size'];
-    if (typeof size === 'number' || typeof size === 'string') {
-        field.size = size;
-    }
-
-    const encoding = fieldObj['encoding'];
-    if (typeof encoding === 'string') {
-        field.encoding = encoding;
-    }
-
+    // 共通フィールド
+    const doc = typeof fieldObj['doc'] === 'string' ? fieldObj['doc'] : undefined;
+    
+    // 繰り返し設定
     const repeat = fieldObj['repeat'];
-    if (repeat === 'expr') {
-        field.repeat = 'expr';
-    }
-
     const repeatExpr = fieldObj['repeat-expr'];
-    if (typeof repeatExpr === 'number' || typeof repeatExpr === 'string') {
-        field.repeatExpr = repeatExpr;
-    }
-
+    const hasRepeat = repeat === 'expr' && (typeof repeatExpr === 'number' || typeof repeatExpr === 'string');
+    
+    // contents設定
     const contents = fieldObj['contents'];
-    if (Array.isArray(contents)) {
-        field.contents = contents.filter((v): v is number => typeof v === 'number');
+    const hasContents = Array.isArray(contents);
+    
+    // 文字列型判定
+    const isStr = type === 'str' || type === 'strz';
+    
+    // size, encoding
+    const size = fieldObj['size'];
+    const encoding = fieldObj['encoding'];
+
+    // 適切な型を構築して返す
+    if (hasContents) {
+        // ContentsField
+        const contentsArray = contents.filter((v): v is number => typeof v === 'number');
+        if (hasRepeat) {
+            return {
+                id,
+                type,
+                contents: contentsArray,
+                repeat: 'expr' as const,
+                repeatExpr: repeatExpr as number | string,
+                doc,
+            };
+        }
+        return { id, type, contents: contentsArray, doc };
     }
 
-    const doc = fieldObj['doc'];
-    if (typeof doc === 'string') {
-        field.doc = doc;
+    if (isStr) {
+        // StringField
+        const strField: KsyField = hasRepeat
+            ? {
+                id,
+                type: type as 'str' | 'strz',
+                size: typeof size === 'number' || typeof size === 'string' ? size : undefined,
+                encoding: typeof encoding === 'string' ? encoding : undefined,
+                repeat: 'expr' as const,
+                repeatExpr: repeatExpr as number | string,
+                doc,
+            }
+            : {
+                id,
+                type: type as 'str' | 'strz',
+                size: typeof size === 'number' || typeof size === 'string' ? size : undefined,
+                encoding: typeof encoding === 'string' ? encoding : undefined,
+                doc,
+            };
+        return strField;
     }
 
-    return field;
+    // PrimitiveField または UserTypeField
+    if (hasRepeat) {
+        return {
+            id,
+            type,
+            repeat: 'expr' as const,
+            repeatExpr: repeatExpr as number | string,
+            doc,
+        };
+    }
+    return { id, type, doc };
 }
 
 function convertToKsyType(obj: YamlObject): KsyType {
@@ -222,9 +257,13 @@ export function parseBinary(data: ArrayBuffer, schema: KsySchema): ParseResult {
  * フィールドをパースしてBinaryRangeを返す
  */
 function parseField(context: ParseContext, field: KsyField): BinaryRange[] {
-    // 繰り返し処理
-    if (field.repeat === 'expr' && field.repeatExpr !== undefined) {
-        const count = resolveExpr(context, field.repeatExpr);
+    // 繰り返し処理（配列フィールド）
+    if (isArrayField(field)) {
+        const repeatExpr = getRepeatExpr(field);
+        if (repeatExpr === undefined) {
+            throw new Error(`Field "${field.id}": repeat-expr is required for array field`);
+        }
+        const count = resolveExpr(context, repeatExpr);
         const ranges: BinaryRange[] = [];
         const arrayValues: unknown[] = [];
 
@@ -266,8 +305,8 @@ function parseSingleField(
         const interpretType = createInterpretType(typeName, primitiveInfo.size, primitiveInfo.signed);
         const range = new BinaryRange(data, displayName, interpretType);
         
-        // contents検証
-        if (field.contents) {
+        // contents検証（型ガードを使用）
+        if (isContentsField(field)) {
             if (!arraysEqual(data, new Uint8Array(field.contents))) {
                 context.warnings.push(
                     `Field "${displayName}": expected contents [${field.contents.join(', ')}] but got [${Array.from(data).join(', ')}]`
@@ -278,11 +317,11 @@ function parseSingleField(
         return [range, value];
     }
 
-    // 文字列型
-    if (isStringType(typeName)) {
+    // 文字列型（型ガードを使用）
+    if (isStringField(field)) {
         const encoding = field.encoding ?? context.defaultEncoding;
 
-        if (typeName === 'strz') {
+        if (field.type === 'strz') {
             const maxSize = field.size !== undefined ? resolveExpr(context, field.size) : undefined;
             const [value, bytesRead] = readStringZ(context.dataView, context.offset, maxSize, encoding);
             context.offset += bytesRead;

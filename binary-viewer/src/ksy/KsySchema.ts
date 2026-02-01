@@ -21,24 +21,127 @@ export interface KsyMeta {
 /** 繰り返しの種類 */
 export type RepeatType = 'expr';
 
-/** フィールド定義 */
-export interface KsyField {
+// ============================================
+// フィールド型定義（Union型による型安全な設計）
+// ============================================
+
+/** 全フィールド共通の基本プロパティ */
+interface KsyFieldBase {
     /** フィールドID（名前） */
     id: string;
-    /** 型名 (u1, u2, u3, u4, s1, s2, s3, s4, str, strz, またはユーザー定義型) */
+    /** ドキュメント（説明） */
+    doc?: string;
+}
+
+/** 繰り返し設定（配列フィールド用） */
+interface WithRepeat {
+    /** 繰り返しの種類 */
+    repeat: RepeatType;
+    /** 繰り返し回数（フィールド参照または数値） */
+    repeatExpr: number | string;
+}
+
+/**
+ * 固定バイト列フィールド（マジックナンバー等）
+ * contents が必須、type は不要
+ */
+export interface KsyContentsField extends KsyFieldBase {
+    /** 型名（プリミティブ型で読み取り、contentsと比較） */
     type: string;
-    /** サイズ（str型などで使用、数値またはフィールド参照） */
+    /** 期待するバイト列 */
+    contents: number[];
+}
+
+/**
+ * 固定バイト列フィールド（配列版）
+ */
+export interface KsyContentsArrayField extends KsyContentsField, WithRepeat {}
+
+/**
+ * 文字列型フィールド（str, strz）
+ * size が必須（strz の場合は最大サイズとして使用、省略可能な場合もある）
+ */
+export interface KsyStringField extends KsyFieldBase {
+    /** 型名 ('str' または 'strz') */
+    type: 'str' | 'strz';
+    /** サイズ（数値またはフィールド参照） */
     size?: number | string;
     /** 文字列エンコーディング */
     encoding?: string;
-    /** 繰り返しの種類 */
-    repeat?: RepeatType;
-    /** 繰り返し回数（フィールド参照または数値） */
-    repeatExpr?: number | string;
-    /** 期待するバイト列（マジックナンバー検証用） */
-    contents?: number[];
-    /** ドキュメント（説明） */
-    doc?: string;
+}
+
+/**
+ * 文字列型フィールド（配列版）
+ */
+export interface KsyStringArrayField extends KsyStringField, WithRepeat {}
+
+/**
+ * プリミティブ型フィールド（u1, u2, s4など）
+ */
+export interface KsyPrimitiveField extends KsyFieldBase {
+    /** 型名 (u1, u2, u3, u4, s1, s2, s3, s4, u2le, u4be など) */
+    type: string;
+}
+
+/**
+ * プリミティブ型フィールド（配列版）
+ */
+export interface KsyPrimitiveArrayField extends KsyPrimitiveField, WithRepeat {}
+
+/**
+ * ユーザー定義型フィールド
+ */
+export interface KsyUserTypeField extends KsyFieldBase {
+    /** ユーザー定義型名 */
+    type: string;
+}
+
+/**
+ * ユーザー定義型フィールド（配列版）
+ */
+export interface KsyUserTypeArrayField extends KsyUserTypeField, WithRepeat {}
+
+/**
+ * フィールド定義（Union型）
+ * 
+ * 注意: KsyPrimitiveField と KsyUserTypeField は構造上同じだが、
+ * 実行時にスキーマの types を参照して区別する
+ */
+export type KsyField =
+    | KsyContentsField
+    | KsyContentsArrayField
+    | KsyStringField
+    | KsyStringArrayField
+    | KsyPrimitiveField
+    | KsyPrimitiveArrayField
+    | KsyUserTypeField
+    | KsyUserTypeArrayField;
+
+// ============================================
+// 型ガード関数
+// ============================================
+
+/** contentsフィールドかどうか */
+export function isContentsField(field: KsyField): field is KsyContentsField | KsyContentsArrayField {
+    return 'contents' in field && Array.isArray(field.contents);
+}
+
+/** 文字列型フィールドかどうか */
+export function isStringField(field: KsyField): field is KsyStringField | KsyStringArrayField {
+    return field.type === 'str' || field.type === 'strz';
+}
+
+/** 配列フィールドかどうか */
+export function isArrayField(field: KsyField): field is KsyContentsArrayField | KsyStringArrayField | KsyPrimitiveArrayField | KsyUserTypeArrayField {
+    return 'repeat' in field && field.repeat !== undefined;
+}
+
+/** 繰り返し回数を取得（配列フィールドの場合） */
+export function getRepeatExpr(field: KsyField): number | string | undefined {
+    if (isArrayField(field)) {
+        return field.repeatExpr;
+    }
+    return undefined;
 }
 
 /** ユーザー定義型 */
