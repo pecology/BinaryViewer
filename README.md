@@ -33,6 +33,23 @@ seq:                   # フィールドの並び（上から順に読み込ま�
     type: u2
 ```
 
+### JSON形式での記述
+
+KSYスキーマはJSON形式でも記述できます：
+
+```json
+{
+  "meta": {
+    "id": "my_format",
+    "endian": "le"
+  },
+  "seq": [
+    { "id": "magic", "type": "u4" },
+    { "id": "version", "type": "u2" }
+  ]
+}
+```
+
 ### 対応している型
 
 | 型名 | 説明 |

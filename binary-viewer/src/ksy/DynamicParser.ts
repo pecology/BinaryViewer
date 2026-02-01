@@ -70,10 +70,24 @@ interface ParseContext {
 }
 
 /**
- * YAMLテキストからKsyスキーマをパース
+ * テキスト（YAMLまたはJSON）からKsyスキーマをパース
+ * JSONの場合は先にパースを試み、失敗したらYAMLとしてパース
  */
-export function parseKsySchema(yamlText: string): KsySchema {
-    const obj = parseYaml(yamlText) as YamlObject;
+export function parseKsySchema(text: string): KsySchema {
+    const trimmed = text.trim();
+    
+    // JSONかどうかを判定（{で始まる場合）
+    if (trimmed.startsWith('{')) {
+        try {
+            const obj = JSON.parse(trimmed);
+            return convertToKsySchema(obj);
+        } catch {
+            // JSONパースに失敗した場合はYAMLとして試行
+        }
+    }
+    
+    // YAMLとしてパース
+    const obj = parseYaml(text) as YamlObject;
     return convertToKsySchema(obj);
 }
 
