@@ -622,41 +622,71 @@ details > details {
 *[data-highlight="1"] {
   background-color: #ffebee;
 }
+.details-wrapper details[data-highlight="1"] > summary {
+  background-color: #ffebee !important;
+}
 
 *[data-highlight="2"] {
   background-color: #ffcdd2;
+}
+.details-wrapper details[data-highlight="2"] > summary {
+  background-color: #ffcdd2 !important;
 }
 
 *[data-highlight="3"] {
   background-color: #ef9a9a;
 }
+.details-wrapper details[data-highlight="3"] > summary {
+  background-color: #ef9a9a !important;
+}
 
 *[data-highlight="4"] {
   background-color: #e8f5e9;
+}
+.details-wrapper details[data-highlight="4"] > summary {
+  background-color: #e8f5e9 !important;
 }
 
 *[data-highlight="5"] {
   background-color: #c8e6c9;
 }
+.details-wrapper details[data-highlight="5"] > summary {
+  background-color: #c8e6c9 !important;
+}
 
 *[data-highlight="6"] {
   background-color: #e3f2fd;
+}
+.details-wrapper details[data-highlight="6"] > summary {
+  background-color: #e3f2fd !important;
 }
 
 *[data-highlight="7"] {
   background-color: #bbdefb;
 }
+.details-wrapper details[data-highlight="7"] > summary {
+  background-color: #bbdefb !important;
+}
 
 *[data-highlight="8"] {
   background-color: #f3e5f5;
+}
+.details-wrapper details[data-highlight="8"] > summary {
+  background-color: #f3e5f5 !important;
 }
 
 *[data-highlight="9"] {
   background-color: #e1bee7;
 }
+.details-wrapper details[data-highlight="9"] > summary {
+  background-color: #e1bee7 !important;
+}
 
 *[data-highlight="10"] {
   background-color: #fff3e0;
+}
+.details-wrapper details[data-highlight="10"] > summary {
+  background-color: #fff3e0 !important;
 }
 
 thead th {
