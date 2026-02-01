@@ -5,11 +5,10 @@ import { saveExtensionMapping, getParserForExtension, getExtensionFromFileName, 
 import { getBuiltinParsers, getBuiltinParser } from './parserRegistry.ts'
 import type { BinaryRange } from './BinaryRange.ts'
 
-// 現在読み込んでいるバイナリデータ
-let currentData: ArrayBuffer | null = null;
-let currentFileName: string = '';
-// 編集可能なバイナリデータ（Uint8Arrayで直接編集可能）
+// 現在読み込んでいるバイナリデータ（編集可能）
+// パース時は editableData.buffer でArrayBufferとして渡す
 let editableData: Uint8Array | null = null;
+let currentFileName: string = '';
 // 現在のパース結果（イベントリスナーから参照）
 let currentParseResult: BinaryRange | null = null;
 // 1ページ当たりの表示バイト数（16の倍数推奨）
@@ -257,7 +256,7 @@ document.querySelector<HTMLSelectElement>('#parser-select')!.addEventListener('c
     }
     
     // データがあれば再パース
-    if (currentData) {
+    if (editableData) {
         parseAndDisplay();
     }
 });
@@ -380,10 +379,10 @@ function updateExtMappingInfo(): void {
 async function loadFile(file: File): Promise<void> {
     clearError();
     try {
-        currentData = await file.arrayBuffer();
+        const arrayBuffer = await file.arrayBuffer();
         currentFileName = file.name;
         // 編集可能なUint8Arrayを作成
-        editableData = new Uint8Array(currentData.slice(0));
+        editableData = new Uint8Array(arrayBuffer);
         
         document.querySelector<HTMLSpanElement>('#current-file-name')!.textContent = `📄 ${file.name}`;
         document.querySelector<HTMLButtonElement>('#download-btn')!.disabled = false;
@@ -552,12 +551,12 @@ document.querySelector<HTMLButtonElement>('#ksy-apply-btn')!.addEventListener('c
         return;
     }
     
-    if (currentData) {
+    if (editableData) {
         // 一時的なパース用にパーサー選択を変更せずにパース
         clearError();
         try {
             const schema = parseKsySchema(content);
-            const result = parseBinary(currentData, schema);
+            const result = parseBinary(editableData.buffer as ArrayBuffer, schema);
             if (result.warnings.length > 0) {
                 console.warn('Parse warnings:', result.warnings);
             }
@@ -669,7 +668,7 @@ async function parseAndDisplay(): Promise<void> {
     const parserSelect = document.querySelector<HTMLSelectElement>('#parser-select')!;
     clearError();
     
-    if (!currentData) {
+    if (!editableData) {
         return;
     }
     
@@ -680,7 +679,7 @@ async function parseAndDisplay(): Promise<void> {
         // 組み込みパーサーをチェック
         const builtinParser = getBuiltinParser(parserType);
         if (builtinParser) {
-            parseResult = builtinParser.parse(new Uint8Array(currentData));
+            parseResult = builtinParser.parse(editableData);
         } else if (parserType.startsWith('ksy:')) {
             // 保存済みKSYスキーマを使用
             const ksyName = parserType.substring(4);
@@ -690,7 +689,7 @@ async function parseAndDisplay(): Promise<void> {
                 return;
             }
             const schema = parseKsySchema(ksyContent);
-            const result = parseBinary(currentData, schema);
+            const result = parseBinary(editableData.buffer as ArrayBuffer, schema);
             if (result.warnings.length > 0) {
                 console.warn('Parse warnings:', result.warnings);
             }
@@ -739,7 +738,7 @@ function restoreAccordionState(openOffsets: Set<string>): void {
 
 // 編集後の再パース（アコーディオン状態を保持）
 async function reparseAfterEdit(): Promise<void> {
-    if (!editableData || !currentData) return;
+    if (!editableData) return;
     
     // アコーディオン状態を保存
     const accordionState = saveAccordionState();
@@ -748,10 +747,7 @@ async function reparseAfterEdit(): Promise<void> {
     const pagingInput = document.querySelector<HTMLInputElement>('#paging-index-input');
     const currentPageIndex = pagingInput ? parseInt(pagingInput.value) || 0 : 0;
     
-    // editableDataを元にcurrentDataを更新（ArrayBufferとして新しいコピーを作成）
-    currentData = new Uint8Array(editableData).buffer;
-    
-    // 再パース
+    // 再パース（editableDataはすでに更新済み）
     await parseAndDisplay();
     
     // ページインデックスを復元
