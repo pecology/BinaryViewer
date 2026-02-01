@@ -296,118 +296,6 @@ h1 {
   color: #fff;
 }
 
-/* KSYエディタ */
-.ksy-editor {
-  padding: 10px 15px;
-  border-top: 1px solid #ddd;
-  background-color: #fafafa;
-}
-
-.ksy-editor > details > summary {
-  cursor: pointer;
-  color: #1a73e8;
-  font-size: 13px;
-  font-weight: bold;
-}
-
-.ksy-editor > details > summary:hover {
-  text-decoration: underline;
-}
-
-.ksy-editor-content {
-  margin-top: 10px;
-}
-
-.ksy-editor .ksy-file-row {
-  margin-bottom: 8px;
-}
-
-.ksy-editor .ksy-file-row label {
-  display: block;
-  font-size: 11px;
-  color: #666;
-  margin-bottom: 4px;
-}
-
-.ksy-editor .ksy-save-row {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.ksy-editor #ksy-save-name {
-  flex: 1;
-  padding: 6px 8px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-  background-color: #fff;
-  color: #333;
-  font-size: 12px;
-}
-
-.ksy-editor #ksy-save-name:focus {
-  outline: none;
-  border-color: #1a73e8;
-}
-
-.ksy-editor #ksy-save-btn,
-.ksy-editor #ksy-delete-btn {
-  padding: 6px 10px;
-  font-size: 12px;
-  border-radius: 4px;
-  border: 1px solid #1a73e8;
-  background-color: #fff;
-  color: #1a73e8;
-  cursor: pointer;
-}
-
-.ksy-editor #ksy-save-btn:hover {
-  background-color: #1a73e8;
-  color: #fff;
-}
-
-.ksy-editor #ksy-delete-btn:hover {
-  background-color: #d32f2f;
-  border-color: #d32f2f;
-  color: #fff;
-}
-
-.ksy-editor #ksyText {
-  width: 100%;
-  min-height: 150px;
-  font-family: monospace;
-  font-size: 12px;
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  resize: vertical;
-  box-sizing: border-box;
-  background-color: #fff;
-  color: #333;
-  margin-bottom: 8px;
-}
-
-.ksy-editor #ksyText:focus {
-  outline: none;
-  border-color: #1a73e8;
-}
-
-.ksy-editor #ksy-apply-btn {
-  width: 100%;
-  padding: 8px 12px;
-  font-size: 12px;
-  border-radius: 4px;
-  border: 1px solid #34a853;
-  background-color: #34a853;
-  color: #fff;
-  cursor: pointer;
-  margin-bottom: 8px;
-}
-
-.ksy-editor #ksy-apply-btn:hover {
-  background-color: #2d8f47;
-}
-
 .input-panel .error-message {
   margin: 10px 15px;
   max-width: none;
@@ -734,4 +622,223 @@ thead th {
   background: #4caf50;
   color: #fff;
   z-index: 3;
+}
+
+/* モーダル */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  width: 90%;
+  max-width: 900px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f5f5f5;
+  border-radius: 8px 8px 0 0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.1em;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  padding: 0 8px;
+}
+
+.modal-close:hover {
+  color: #333;
+}
+
+.modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* KSYモーダルレイアウト */
+.ksy-modal-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 16px;
+  min-height: 400px;
+}
+
+.ksy-list-panel {
+  border-right: 1px solid #e0e0e0;
+  padding-right: 16px;
+}
+
+.ksy-list-panel h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.ksy-schema-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+
+.ksy-list-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ksy-list-item:last-child {
+  border-bottom: none;
+}
+
+.ksy-list-item:hover {
+  background: #f5f5f5;
+}
+
+.ksy-list-item.selected {
+  background: #e3f2fd;
+  color: #1a73e8;
+}
+
+.ksy-list-empty {
+  padding: 16px;
+  color: #999;
+  font-style: italic;
+  text-align: center;
+}
+
+.ksy-new-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px;
+  background: #fff;
+  border: 1px dashed #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #666;
+}
+
+.ksy-new-btn:hover {
+  border-color: #1a73e8;
+  color: #1a73e8;
+}
+
+.ksy-edit-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ksy-edit-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ksy-edit-header input {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.ksy-edit-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.ksy-edit-buttons button {
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  background: #fff;
+}
+
+.ksy-edit-buttons button:hover {
+  background: #f5f5f5;
+}
+
+.ksy-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9em;
+}
+
+.ksy-edit-panel textarea {
+  flex: 1;
+  min-height: 250px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.ksy-apply-btn {
+  padding: 10px 16px;
+  background: #4caf50;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.ksy-apply-btn:hover {
+  background: #43a047;
+}
+
+.ksy-export-import-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.ksy-export-import-row button {
+  padding: 8px 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  background: #fff;
+}
+
+.ksy-export-import-row button:hover {
+  background: #f5f5f5;
 }

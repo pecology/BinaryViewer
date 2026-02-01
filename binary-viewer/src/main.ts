@@ -44,37 +44,12 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <select id="parser-select">
               <!-- 動的に生成 -->
           </select>
+          <button id="ksy-manage-btn" title="KSYスキーマ管理">📝 KSY管理</button>
           <button id="link-ext-btn" title="この拡張子に紐づける">🔗 拡張子に紐づけ</button>
           <div id="ext-mapping-info" class="ext-mapping-info"></div>
           <details class="ext-mapping-list">
               <summary>拡張子マッピング一覧</summary>
               <div id="ext-mapping-list-content"></div>
-          </details>
-      </div>
-      <div id="ksy-editor" class="ksy-editor">
-          <details>
-              <summary>📝 KSYスキーマ編集</summary>
-              <div class="ksy-editor-content">
-                  <div class="ksy-file-row">
-                      <label>ファイルから読み込み:</label>
-                      <input type="file" id="ksyFileInput" accept=".ksy,.yaml,.yml" />
-                  </div>
-                  <div class="ksy-save-row">
-                      <input type="text" id="ksy-save-name" placeholder="スキーマ名" />
-                      <button id="ksy-save-btn">💾 保存</button>
-                      <button id="ksy-delete-btn" title="削除">🗑️</button>
-                  </div>
-                  <textarea id="ksyText" placeholder="meta:\n  id: my_format\n  endian: le\nseq:\n  - id: magic\n    type: u4"></textarea>
-                  <button id="ksy-apply-btn">▶ 適用（保存せずにパース）</button>
-                  <details class="ksy-export-import">
-                      <summary>KSYエクスポート/インポート</summary>
-                      <div class="ksy-export-import-content">
-                          <button id="ksy-export-all-btn">📤 全てエクスポート</button>
-                          <button id="ksy-import-btn">📥 インポート</button>
-                          <input type="file" id="ksy-import-file" accept=".json" style="display: none;" />
-                      </div>
-                  </details>
-              </div>
           </details>
       </div>
       <div id="error-message" class="error-message"></div>
@@ -90,6 +65,45 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="panel structure-panel">
       <h3>構造 <span class="structure-controls"><button id="expand-all-btn" title="全て開く">▼ 全開</button><button id="collapse-all-btn" title="全て閉じる">▶ 全閉</button></span></h3>
       <div class="details-wrapper"></div>
+    </div>
+  </div>
+  
+  <!-- KSYスキーマ管理モーダル -->
+  <div id="ksy-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📝 KSYスキーマ管理</h3>
+        <button id="ksy-modal-close" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="ksy-modal-layout">
+          <div class="ksy-list-panel">
+            <h4>保存済みスキーマ</h4>
+            <ul id="ksy-schema-list" class="ksy-schema-list"></ul>
+            <button id="ksy-new-btn" class="ksy-new-btn">+ 新規作成</button>
+          </div>
+          <div class="ksy-edit-panel">
+            <div class="ksy-edit-header">
+              <input type="text" id="ksy-save-name" placeholder="スキーマ名" />
+              <div class="ksy-edit-buttons">
+                <button id="ksy-save-btn" title="保存">💾 保存</button>
+                <button id="ksy-delete-btn" title="削除">🗑️ 削除</button>
+              </div>
+            </div>
+            <div class="ksy-file-row">
+              <label>ファイルから読み込み:</label>
+              <input type="file" id="ksyFileInput" accept=".ksy,.yaml,.yml" />
+            </div>
+            <textarea id="ksyText" placeholder="meta:\n  id: my_format\n  endian: le\nseq:\n  - id: magic\n    type: u4"></textarea>
+            <button id="ksy-apply-btn" class="ksy-apply-btn">▶ 適用（保存せずにパース）</button>
+          </div>
+        </div>
+        <div class="ksy-export-import-row">
+          <button id="ksy-export-all-btn">📤 全てエクスポート</button>
+          <button id="ksy-import-btn">📥 インポート</button>
+          <input type="file" id="ksy-import-file" accept=".json" style="display: none;" />
+        </div>
+      </div>
     </div>
   </div>
 `;
@@ -148,6 +162,83 @@ function updateParserSelect(selectedValue?: string): void {
 
 // 初期化時にパーサーセレクトを更新
 updateParserSelect();
+
+// KSYモーダル関連
+const ksyModal = document.querySelector<HTMLDivElement>('#ksy-modal')!;
+
+/** KSYスキーマ一覧を更新 */
+function updateKsySchemaList(): void {
+    const list = document.querySelector<HTMLUListElement>('#ksy-schema-list')!;
+    const names = listKsyNames();
+    
+    if (names.length === 0) {
+        list.innerHTML = '<li class="ksy-list-empty">保存済みスキーマはありません</li>';
+        return;
+    }
+    
+    list.innerHTML = names.map(name => 
+        `<li class="ksy-list-item" data-name="${name}">${name}</li>`
+    ).join('');
+    
+    // クリックでスキーマをロード
+    list.querySelectorAll<HTMLLIElement>('.ksy-list-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const name = item.dataset.name!;
+            const content = loadKsy(name);
+            if (content) {
+                document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = content;
+                document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = name;
+                // 選択状態を表示
+                list.querySelectorAll('.ksy-list-item').forEach(i => i.classList.remove('selected'));
+                item.classList.add('selected');
+            }
+        });
+    });
+}
+
+/** モーダルを開く */
+function openKsyModal(): void {
+    updateKsySchemaList();
+    ksyModal.style.display = 'flex';
+}
+
+/** モーダルを閉じる */
+function closeKsyModal(): void {
+    ksyModal.style.display = 'none';
+}
+
+// モーダル開くボタン
+document.querySelector<HTMLButtonElement>('#ksy-manage-btn')!.addEventListener('click', openKsyModal);
+
+// モーダル閉じるボタン
+document.querySelector<HTMLButtonElement>('#ksy-modal-close')!.addEventListener('click', closeKsyModal);
+
+// モーダル背景クリックで閉じる
+ksyModal.addEventListener('click', (e) => {
+    if (e.target === ksyModal) {
+        closeKsyModal();
+    }
+});
+
+// Escキーでモーダルを閉じる
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && ksyModal.style.display === 'flex') {
+        closeKsyModal();
+    }
+});
+
+// 新規作成ボタン
+document.querySelector<HTMLButtonElement>('#ksy-new-btn')!.addEventListener('click', () => {
+    document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = '';
+    document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = `meta:
+  id: my_format
+  endian: le
+seq:
+  - id: magic
+    type: u4`;
+    // 選択状態をクリア
+    document.querySelectorAll('.ksy-list-item').forEach(i => i.classList.remove('selected'));
+});
 
 // パーサー選択時に再パース
 document.querySelector<HTMLSelectElement>('#parser-select')!.addEventListener('change', (e) => {
@@ -417,6 +508,11 @@ document.querySelector<HTMLButtonElement>('#ksy-save-btn')!.addEventListener('cl
     const result = saveKsy(name, content);
     if (result.success) {
         updateParserSelect(`ksy:${name}`);
+        updateKsySchemaList();
+        // 保存したスキーマを選択状態に
+        document.querySelectorAll<HTMLLIElement>('.ksy-list-item').forEach(item => {
+            item.classList.toggle('selected', item.dataset.name === name);
+        });
         alert(`"${name}" を保存しました`);
     } else {
         alert(`保存エラー: ${result.error}`);
@@ -438,6 +534,7 @@ document.querySelector<HTMLButtonElement>('#ksy-delete-btn')!.addEventListener('
     if (confirm(`"${name}" を削除しますか？`)) {
         deleteKsy(name);
         updateParserSelect();
+        updateKsySchemaList();
         nameInput.value = '';
         document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = '';
         alert(`"${name}" を削除しました`);
@@ -527,6 +624,7 @@ document.querySelector<HTMLInputElement>('#ksy-import-file')!.addEventListener('
         
         const { imported, errors } = importKsy(data, overwrite);
         updateParserSelect();
+        updateKsySchemaList();
         
         if (imported.length > 0) {
             let message = `${imported.length} 件のKSYスキーマをインポートしました:\n${imported.join(', ')}`;
