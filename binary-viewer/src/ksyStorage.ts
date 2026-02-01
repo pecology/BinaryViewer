@@ -4,6 +4,12 @@
 
 const KSY_PREFIX = 'ksy:';
 
+/** 保存結果 */
+export interface SaveResult {
+    success: boolean;
+    error?: string;
+}
+
 export interface SavedKsy {
     name: string;
     content: string;
@@ -11,9 +17,24 @@ export interface SavedKsy {
 
 /**
  * KSYスキーマを保存
+ * @returns 保存結果（成功/失敗とエラーメッセージ）
  */
-export function saveKsy(name: string, content: string): void {
-    localStorage.setItem(KSY_PREFIX + name, content);
+export function saveKsy(name: string, content: string): SaveResult {
+    try {
+        localStorage.setItem(KSY_PREFIX + name, content);
+        return { success: true };
+    } catch (e) {
+        if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+            return { 
+                success: false, 
+                error: 'localStorageの容量が上限に達しました。不要なスキーマを削除してください。' 
+            };
+        }
+        return { 
+            success: false, 
+            error: `保存に失敗しました: ${e instanceof Error ? e.message : String(e)}` 
+        };
+    }
 }
 
 /**
@@ -73,17 +94,22 @@ export function exportAllKsy(): Record<string, string> {
  * KSYスキーマをインポート
  * @param data インポートするデータ
  * @param overwrite 上書きするかどうか
- * @returns インポートされたスキーマ名の配列
+ * @returns インポート結果（成功したスキーマ名の配列とエラー情報）
  */
-export function importKsy(data: Record<string, string>, overwrite: boolean = false): string[] {
+export function importKsy(data: Record<string, string>, overwrite: boolean = false): { imported: string[], errors: string[] } {
     const imported: string[] = [];
+    const errors: string[] = [];
     for (const [name, content] of Object.entries(data)) {
         if (typeof content === 'string') {
             if (overwrite || !hasKsy(name)) {
-                saveKsy(name, content);
-                imported.push(name);
+                const result = saveKsy(name, content);
+                if (result.success) {
+                    imported.push(name);
+                } else {
+                    errors.push(`${name}: ${result.error}`);
+                }
             }
         }
     }
-    return imported;
+    return { imported, errors };
 }

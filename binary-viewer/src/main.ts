@@ -414,9 +414,13 @@ document.querySelector<HTMLButtonElement>('#ksy-save-btn')!.addEventListener('cl
         return;
     }
     
-    saveKsy(name, content);
-    updateParserSelect(`ksy:${name}`);
-    alert(`"${name}" を保存しました`);
+    const result = saveKsy(name, content);
+    if (result.success) {
+        updateParserSelect(`ksy:${name}`);
+        alert(`"${name}" を保存しました`);
+    } else {
+        alert(`保存エラー: ${result.error}`);
+    }
 });
 
 // 保存済みKSYを削除
@@ -521,11 +525,17 @@ document.querySelector<HTMLInputElement>('#ksy-import-file')!.addEventListener('
             );
         }
         
-        const imported = importKsy(data, overwrite);
+        const { imported, errors } = importKsy(data, overwrite);
         updateParserSelect();
         
         if (imported.length > 0) {
-            alert(`${imported.length} 件のKSYスキーマをインポートしました:\n${imported.join(', ')}`);
+            let message = `${imported.length} 件のKSYスキーマをインポートしました:\n${imported.join(', ')}`;
+            if (errors.length > 0) {
+                message += `\n\nエラー:\n${errors.join('\n')}`;
+            }
+            alert(message);
+        } else if (errors.length > 0) {
+            alert(`インポートエラー:\n${errors.join('\n')}`);
         } else {
             alert('インポートされたスキーマはありません');
         }
