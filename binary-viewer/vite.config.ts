@@ -6,5 +6,7 @@ export default defineConfig({
   base: '/BinaryViewer/',
   build: {
     outDir: 'dist',
+    // ソースマップを生成（本番でもTSファイルでデバッグ可能に）
+    sourcemap: true,
   },
 })
