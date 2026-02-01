@@ -12,6 +12,8 @@ let currentFileName: string = '';
 let editableData: Uint8Array | null = null;
 // 現在のパース結果（イベントリスナーから参照）
 let currentParseResult: BinaryRange | null = null;
+// 1ページ当たりの表示バイト数（16の倍数推奨）
+let bytesPerPage = 1024;
 
 function chunk<T>(source: Iterable<T>, chunkSize: number): T[][] {
     const result: T[][] = [];
@@ -765,11 +767,20 @@ async function reparseAfterEdit(): Promise<void> {
 
 // パース結果を表示する関数
 function displayParseResult(parseResult: BinaryRange): void {
+    const maxPage = Math.ceil(parseResult.data.byteLength / bytesPerPage) - 1;
     const pagingControl = 
     `
-    <label for="paging-index-input">Offset</label>
-    <input type="number" id="paging-index-input" value="0" min="0" max="${parseResult.data.byteLength / 1024}"></input>
-    <span id="display-range-text">(0 ~ 1023byte)</span>
+    <label for="paging-index-input">Page</label>
+    <input type="number" id="paging-index-input" value="0" min="0" max="${maxPage}"></input>
+    <span id="display-range-text">(0 ~ ${bytesPerPage - 1}byte)</span>
+    <label for="bytes-per-page-select" style="margin-left: 16px;">表示:</label>
+    <select id="bytes-per-page-select">
+        <option value="256" ${bytesPerPage === 256 ? 'selected' : ''}>256B</option>
+        <option value="512" ${bytesPerPage === 512 ? 'selected' : ''}>512B</option>
+        <option value="1024" ${bytesPerPage === 1024 ? 'selected' : ''}>1KB</option>
+        <option value="2048" ${bytesPerPage === 2048 ? 'selected' : ''}>2KB</option>
+        <option value="4096" ${bytesPerPage === 4096 ? 'selected' : ''}>4KB</option>
+    </select>
     `
     document.querySelector<HTMLDivElement>('#hex-table-control')!.innerHTML = pagingControl;
     document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(parseResult);
@@ -785,7 +796,24 @@ function displayParseResult(parseResult: BinaryRange): void {
 
         document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(parseResult, pagingIndex);
 
-        document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${pagingIndex * 1024} ~ ${(pagingIndex + 1) * 1024 -1}byte)`
+        document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${pagingIndex * bytesPerPage} ~ ${(pagingIndex + 1) * bytesPerPage - 1}byte)`
+    });
+
+    // 表示バイト数変更
+    document.querySelector<HTMLSelectElement>('#bytes-per-page-select')!.addEventListener('change', (e) => {
+        const pagingInput = document.querySelector<HTMLInputElement>('#paging-index-input')!;
+        const currentPage = parseInt(pagingInput.value) || 0;
+        // 現在の表示開始オフセットを維持して新しいページを計算
+        const currentOffset = currentPage * bytesPerPage;
+        const newBytesPerPage = parseInt((e.target as HTMLSelectElement).value);
+        bytesPerPage = newBytesPerPage;
+        const newPage = Math.floor(currentOffset / bytesPerPage);
+        const maxPage = Math.ceil(parseResult.data.byteLength / bytesPerPage) - 1;
+        const adjustedPage = Math.min(newPage, maxPage);
+        pagingInput.max = maxPage.toString();
+        pagingInput.value = adjustedPage.toString();
+        document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(parseResult, adjustedPage);
+        document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${adjustedPage * bytesPerPage} ~ ${(adjustedPage + 1) * bytesPerPage - 1}byte)`;
     });
 
     document.querySelector<HTMLElement>('.details-wrapper > details')!.addEventListener('keydown', (e) => {
@@ -858,10 +886,10 @@ function displayParseResult(parseResult: BinaryRange): void {
         
         // Hexテーブルの該当ページに移動
         const nowPagingIndex = parseInt((document.querySelector("#paging-index-input") as HTMLInputElement).value);
-        const targetPageIndex = Math.floor(offset / 1024);
+        const targetPageIndex = Math.floor(offset / bytesPerPage);
         if (nowPagingIndex !== targetPageIndex) {
             document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(parseResult, targetPageIndex);
-            document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${targetPageIndex * 1024} ~ ${(targetPageIndex + 1) * 1024 - 1}byte)`;
+            document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${targetPageIndex * bytesPerPage} ~ ${(targetPageIndex + 1) * bytesPerPage - 1}byte)`;
             document.querySelector<HTMLInputElement>('#paging-index-input')!.value = targetPageIndex.toString();
         }
         
@@ -892,11 +920,11 @@ function displayParseResult(parseResult: BinaryRange): void {
         const length = parseInt(detailsElement.dataset.length!);
 
         const nowPagingIndex = parseInt((document.querySelector("#paging-index-input") as HTMLInputElement).value);
-        const clickedElementIndex = Math.floor(offset / 1024);
+        const clickedElementIndex = Math.floor(offset / bytesPerPage);
         if (nowPagingIndex !== clickedElementIndex)
         {
             document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(parseResult, clickedElementIndex);
-            document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${clickedElementIndex * 1024} ~ ${(clickedElementIndex + 1) * 1024 -1}byte)`
+            document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${clickedElementIndex * bytesPerPage} ~ ${(clickedElementIndex + 1) * bytesPerPage - 1}byte)`
             document.querySelector<HTMLInputElement>('#paging-index-input')!.value = clickedElementIndex.toString();
         }
 
@@ -1147,8 +1175,8 @@ const escapeHtml = (text: string): string => {
 
 const byteToString = (byte: number) => byte.toString(16).padStart(2, '0').toUpperCase();
 const toHexTableHtmlString = (hexRange: BinaryRange, pageIndex: number = 0): string => {
-    const displayArray = hexRange.data.subarray(pageIndex * 1024, (pageIndex + 1) * 1024);
-    const offset = hexRange.data.byteOffset + (pageIndex * 1024);
+    const displayArray = hexRange.data.subarray(pageIndex * bytesPerPage, (pageIndex + 1) * bytesPerPage);
+    const offset = hexRange.data.byteOffset + (pageIndex * bytesPerPage);
     return `
             <div class="table-wrapper">
             <table class="table table-sm table-bordered">
@@ -1163,7 +1191,7 @@ const toHexTableHtmlString = (hexRange: BinaryRange, pageIndex: number = 0): str
                             .reduce((acc, r, rowIndex) =>
                                 acc + `<tr>
                                             <th>
-                                                ${(rowIndex + (pageIndex * 1024 / 16)).toString(16).toUpperCase()}
+                                                ${(rowIndex + (pageIndex * bytesPerPage / 16)).toString(16).toUpperCase()}
                                             </th>
                                                 ${r.reduce((acc2, b, colIndex) => 
                                                     acc2 + `<td data-offset="${rowIndex * 16 + colIndex + offset}" 

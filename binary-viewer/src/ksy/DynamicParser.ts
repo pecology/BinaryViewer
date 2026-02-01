@@ -53,7 +53,15 @@ interface ParseContext {
     defaultEncoding: string;
     /** スキーマ（ユーザー定義型参照用） */
     schema: KsySchema;
-    /** 現在のスコープの解析済み値 */
+    /** 
+     * 現在のスコープで解析済みのフィールド値
+     * 
+     * 後続フィールドの式（size, repeat-expr等）で前のフィールドの値を参照するために使用。
+     * 例: `size: name_length` → values['name_length'] から値を取得
+     * 
+     * ユーザー定義型をパースする際は新しいスコープを作成し、
+     * パース完了後に親スコープに復元する。
+     */
     values: Record<string, number | string | Uint8Array | unknown[]>;
     /** 警告メッセージ */
     warnings: string[];
