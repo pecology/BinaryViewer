@@ -38,6 +38,9 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <span class="drop-zone-text">ファイルをドラッグ＆ドロップ<br/>またはクリックで選択<br/>または Ctrl+V</span>
           <input type="file" id="fileInput" />
       </div>
+      <div class="text-input-section" style="margin: 0 10px 10px; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 4px;">
+          <textarea id="hex-text-input" placeholder="Hexテキスト入力 (例: 01 02 0A... 入力すると自動パースされます)" style="width: 100%; height: 60px; resize: vertical; margin-bottom: 0px; box-sizing: border-box; font-family: monospace;"></textarea>
+      </div>
       <div id="current-file-name" class="current-file-name"></div>
       <div class="parser-section">
           <label>パーサー:</label>
@@ -90,12 +93,34 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
                 <button id="ksy-delete-btn" title="削除">🗑️ 削除</button>
               </div>
             </div>
-            <div class="ksy-file-row">
-              <label>ファイルから読み込み:</label>
-              <input type="file" id="ksyFileInput" accept=".ksy,.yaml,.yml" />
+            
+            <div class="ksy-editor-tabs" style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <button id="ksy-tab-raw" class="active" style="flex: 1; padding: 4px; border: 1px solid #1a73e8; background: #1a73e8; color: white; cursor: pointer; border-radius: 4px;">YAMLエディタ</button>
+                <button id="ksy-tab-gui" style="flex: 1; padding: 4px; border: 1px solid #ccc; background: #f5f5f5; cursor: pointer; border-radius: 4px;">GUIビルダー</button>
             </div>
-            <textarea id="ksyText" placeholder="meta:\n  id: my_format\n  endian: le\nseq:\n  - id: magic\n    type: u4"></textarea>
-            <button id="ksy-apply-btn" class="ksy-apply-btn">▶ 適用（保存せずにパース）</button>
+            
+            <div id="ksy-raw-editor" style="display: flex; flex-direction: column; flex: 1;">
+              <div class="ksy-file-row">
+                <label>ファイルから読み込み:</label>
+                <input type="file" id="ksyFileInput" accept=".ksy,.yaml,.yml" />
+              </div>
+              <textarea id="ksyText" placeholder="meta:\n  id: my_format\n  endian: le\nseq:\n  - id: magic\n    type: u4"></textarea>
+            </div>
+            
+            <div id="ksy-gui-editor" style="display: none; flex-direction: column; flex: 1; overflow-y: auto; padding: 10px; border: 1px solid #ccc; border-radius: 4px; background: #fafafa;">
+                <div style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center;">
+                    <label style="font-weight: bold; font-size: 13px;">Endian:</label>
+                    <select id="ksy-gui-endian" style="padding: 4px;">
+                        <option value="le">Little Endian (le)</option>
+                        <option value="be">Big Endian (be)</option>
+                    </select>
+                </div>
+                <h4 style="margin: 0 0 8px 0; font-size: 13px; color: #333;">Fields (seq)</h4>
+                <div id="ksy-gui-fields" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                <button id="ksy-gui-add-field-btn" style="margin-top: 10px; padding: 6px; border: 1px dashed #999; background: #fff; cursor: pointer; border-radius: 4px;">+ フィールド追加</button>
+            </div>
+
+            <button id="ksy-apply-btn" class="ksy-apply-btn" style="display: none;">▶ 適用（保存せずにパース）</button>
           </div>
         </div>
         <div class="ksy-export-import-row">
@@ -490,6 +515,15 @@ document.querySelector<HTMLButtonElement>('#ksy-save-btn')!.addEventListener('cl
     const nameInput = document.querySelector<HTMLInputElement>('#ksy-save-name')!;
     const textArea = document.querySelector<HTMLTextAreaElement>('#ksyText')!;
     const name = nameInput.value.trim();
+    
+    // もしGUIタブが開かれていたら、先にYAMLに変換する
+    const tabGui = document.querySelector<HTMLButtonElement>('#ksy-tab-gui');
+    if (tabGui && tabGui.classList.contains('active') && typeof (window as any).generateYamlFromGui === 'function') {
+        const yaml = (window as any).generateYamlFromGui();
+        if (yaml === null) return; // エラー時は中断
+        textArea.value = yaml;
+    }
+
     const content = textArea.value.trim();
     
     if (!name) {
@@ -513,6 +547,12 @@ document.querySelector<HTMLButtonElement>('#ksy-save-btn')!.addEventListener('cl
         document.querySelectorAll<HTMLLIElement>('.ksy-list-item').forEach(item => {
             item.classList.toggle('selected', item.dataset.name === name);
         });
+        
+        // ファイルが読み込まれていれば自動でパースを実行
+        if (editableData) {
+            parseAndDisplay();
+        }
+        
         alert(`"${name}" を保存しました`);
     } else {
         alert(`保存エラー: ${result.error}`);
@@ -1220,4 +1260,210 @@ const rangeToString = (range: BinaryRange): string => {
     const startIndex = range.data.byteOffset;
     const endIndex = startIndex + range.data.byteLength;
     return `${byteToString(startIndex)} ～ ${byteToString(endIndex - 1)}`;
+}
+
+// ==========================================
+// テキスト入力からのパース処理
+// ==========================================
+let textParseTimeout: number | null = null;
+document.querySelector<HTMLTextAreaElement>('#hex-text-input')?.addEventListener('input', async (e) => {
+    const textarea = e.target as HTMLTextAreaElement;
+    const text = textarea.value;
+    
+    if (textParseTimeout) clearTimeout(textParseTimeout);
+    
+    // 連続入力を防ぐため、300msデバウンスしてパース実行
+    textParseTimeout = window.setTimeout(async () => {
+        if (!text.trim()) {
+            clearError();
+            return;
+        }
+
+        // 空白文字（スペース、タブ、改行等）を削除
+        const cleanedText = text.replace(/\s+/g, '');
+
+        // 16進数として有効かチェック（0-9, a-f, A-F のみ、かつ偶数長）
+        if (!/^[0-9A-Fa-f]+$/.test(cleanedText)) {
+            showError('無効な文字が含まれています。16進数（0-9, A-F）のみ入力してください');
+            return;
+        }
+        if (cleanedText.length % 2 !== 0) {
+            showError('文字数は偶数になるように入力してください（例: "01 02" は4文字なのでOK、"01 2" は3文字なのでNG）');
+            return;
+        }
+
+        clearError();
+        try {
+            const byteLength = cleanedText.length / 2;
+            const arrayBuffer = new ArrayBuffer(byteLength);
+            const view = new Uint8Array(arrayBuffer);
+
+            for (let i = 0; i < byteLength; i++) {
+                view[i] = parseInt(cleanedText.substring(i * 2, i * 2 + 2), 16);
+            }
+
+            currentFileName = '[Text Input]';
+            editableData = view;
+            
+            document.querySelector<HTMLSpanElement>('#current-file-name')!.textContent = `📄 ${currentFileName}`;
+            document.querySelector<HTMLButtonElement>('#download-btn')!.disabled = false;
+            
+            updateExtMappingInfo();
+            
+            await parseAndDisplay();
+        } catch (e) {
+            showError(`テキストパースエラー: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }, 300);
+});
+
+// ==========================================
+// KSY GUIビルダーのロジック
+// ==========================================
+const tabRaw = document.querySelector<HTMLButtonElement>('#ksy-tab-raw');
+const tabGui = document.querySelector<HTMLButtonElement>('#ksy-tab-gui');
+const rawEditor = document.querySelector<HTMLDivElement>('#ksy-raw-editor');
+const guiEditor = document.querySelector<HTMLDivElement>('#ksy-gui-editor');
+const guiFieldsContainer = document.querySelector<HTMLDivElement>('#ksy-gui-fields');
+const guiAddFieldBtn = document.querySelector<HTMLButtonElement>('#ksy-gui-add-field-btn');
+const guiEndianSelect = document.querySelector<HTMLSelectElement>('#ksy-gui-endian');
+const ksySaveNameInput = document.querySelector<HTMLInputElement>('#ksy-save-name');
+const ksyTextArea = document.querySelector<HTMLTextAreaElement>('#ksyText');
+
+if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFieldBtn) {
+    // タブ切り替え
+    tabRaw.addEventListener('click', () => {
+        tabRaw.classList.add('active');
+        tabGui.classList.remove('active');
+        tabRaw.style.background = '#1a73e8';
+        tabRaw.style.color = 'white';
+        tabRaw.style.border = '1px solid #1a73e8';
+        tabGui.style.background = '#f5f5f5';
+        tabGui.style.color = 'black';
+        tabGui.style.border = '1px solid #ccc';
+        rawEditor.style.display = 'flex';
+        guiEditor.style.display = 'none';
+    });
+
+    tabGui.addEventListener('click', () => {
+        tabGui.classList.add('active');
+        tabRaw.classList.remove('active');
+        tabGui.style.background = '#1a73e8';
+        tabGui.style.color = 'white';
+        tabGui.style.border = '1px solid #1a73e8';
+        tabRaw.style.background = '#f5f5f5';
+        tabRaw.style.color = 'black';
+        tabRaw.style.border = '1px solid #ccc';
+        guiEditor.style.display = 'flex';
+        rawEditor.style.display = 'none';
+    });
+
+    // フィールド行のHTMLを生成
+    const createGuiFieldRow = (): HTMLDivElement => {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.gap = '6px';
+        row.style.alignItems = 'center';
+        row.style.background = '#fff';
+        row.style.padding = '6px';
+        row.style.border = '1px solid #e0e0e0';
+        row.style.borderRadius = '4px';
+
+        row.innerHTML = `
+            <input type="text" class="field-id" placeholder="id (例: magic)" style="flex: 2; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" />
+            <select class="field-type" style="flex: 2; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">
+                <option value="u1">u1 (符号なし1byte)</option>
+                <option value="u2">u2 (符号なし2byte)</option>
+                <option value="u4">u4 (符号なし4byte)</option>
+                <option value="s1">s1 (符号あり1byte)</option>
+                <option value="s2">s2 (符号あり2byte)</option>
+                <option value="s4">s4 (符号あり4byte)</option>
+                <option value="str">str (文字列)</option>
+                <option value="strz">strz (NULL終端文字列)</option>
+            </select>
+            <input type="text" class="field-size" placeholder="size" disabled style="flex: 1; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="文字列等のサイズ指定(数値または式)" />
+            <button class="field-delete-btn" style="padding: 4px 8px; background: #ffebee; color: #d32f2f; border: 1px solid #ffcdd2; border-radius: 4px; cursor: pointer;">✕</button>
+        `;
+
+        // 型がstrの場合はsizeを有効化
+        const typeSelect = row.querySelector<HTMLSelectElement>('.field-type')!;
+        const sizeInput = row.querySelector<HTMLInputElement>('.field-size')!;
+        typeSelect.addEventListener('change', () => {
+            if (typeSelect.value === 'str') {
+                sizeInput.disabled = false;
+            } else {
+                sizeInput.disabled = true;
+                sizeInput.value = '';
+            }
+        });
+
+        // 削除ボタン
+        row.querySelector('.field-delete-btn')!.addEventListener('click', () => {
+            row.remove();
+        });
+
+        return row;
+    };
+
+    // 初期フィールドを1つ追加
+    guiFieldsContainer.appendChild(createGuiFieldRow());
+
+    // フィールド追加ボタン
+    guiAddFieldBtn.addEventListener('click', () => {
+        guiFieldsContainer.appendChild(createGuiFieldRow());
+    });
+
+    // GUIからYAMLを生成する関数（グローバルにエクスポートして保存ボタンからも呼べるようにする）
+    (window as any).generateYamlFromGui = (): string | null => {
+        const id = ksySaveNameInput?.value.trim() || 'my_format';
+        const endian = guiEndianSelect?.value || 'le';
+        
+        let yaml = `meta:
+  id: ${id}
+  endian: ${endian}
+seq:
+`;
+
+        const rows = guiFieldsContainer.querySelectorAll('div');
+        if (rows.length === 0) {
+            alert('フィールドがありません');
+            return null;
+        }
+
+        let hasError = false;
+        rows.forEach(row => {
+            const fieldIdInput = row.querySelector<HTMLInputElement>('.field-id');
+            const fieldTypeSelect = row.querySelector<HTMLSelectElement>('.field-type');
+            const fieldSizeInput = row.querySelector<HTMLInputElement>('.field-size');
+            
+            if (!fieldIdInput || !fieldTypeSelect) return;
+
+            const fieldId = fieldIdInput.value.trim();
+            const fieldType = fieldTypeSelect.value;
+            const fieldSize = fieldSizeInput ? fieldSizeInput.value.trim() : '';
+
+            if (!fieldId) {
+                hasError = true;
+                return;
+            }
+
+            yaml += `  - id: ${fieldId}\n    type: ${fieldType}\n`;
+            if (fieldType === 'str') {
+                if (!fieldSize) {
+                    alert(`フィールド "${fieldId}" (str) にはサイズ(数値またはフィールド参照)が必要です。`);
+                    hasError = true;
+                } else {
+                    yaml += `    size: ${fieldSize}\n    encoding: UTF-8\n`;
+                }
+            }
+        });
+
+        if (hasError) {
+            if (!confirm('一部のフィールド名が空、またはエラーがあります。このままYAMLに変換しますか？')) {
+                return null;
+            }
+        }
+
+        return yaml;
+    };
 }
