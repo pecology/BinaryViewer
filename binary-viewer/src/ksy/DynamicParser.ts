@@ -266,7 +266,7 @@ export function parseBinary(data: ArrayBuffer, schema: KsySchema): ParseResult {
 
     // ルートノードを作成（全体を包含するデータ）
     const rootData = new Uint8Array(data, 0, context.offset);
-    const root = new BinaryRange(rootData, schema.meta.id, null, rootRanges);
+    const root = new BinaryRange(rootData, schema.meta.id, null, rootRanges, schema.doc);
 
     return {
         root,
@@ -325,7 +325,7 @@ function parseSingleField(
 
         const data = new Uint8Array(context.buffer, startOffset, primitiveInfo.size);
         const interpretType = createInterpretType(typeName, primitiveInfo.size, primitiveInfo.signed);
-        const range = new BinaryRange(data, displayName, interpretType);
+        const range = new BinaryRange(data, displayName, interpretType, [], field.doc);
         
         // contents検証（型ガードを使用）
         if (isContentsField(field)) {
@@ -350,7 +350,7 @@ function parseSingleField(
 
             const data = new Uint8Array(context.buffer, startOffset, bytesRead);
             const interpretType = createStringInterpretType(encoding);
-            const range = new BinaryRange(data, displayName, interpretType);
+            const range = new BinaryRange(data, displayName, interpretType, [], field.doc);
             return [range, value];
         } else {
             // str
@@ -363,7 +363,7 @@ function parseSingleField(
 
             const data = new Uint8Array(context.buffer, startOffset, size);
             const interpretType = createStringInterpretType(encoding);
-            const range = new BinaryRange(data, displayName, interpretType);
+            const range = new BinaryRange(data, displayName, interpretType, [], field.doc);
             return [range, value];
         }
     }
@@ -404,7 +404,7 @@ function parseUserType(
 
     const length = context.offset - startOffset;
     const data = new Uint8Array(context.buffer, startOffset, length);
-    const range = new BinaryRange(data, displayName, null, subRanges);
+    const range = new BinaryRange(data, displayName, null, subRanges, userType.doc);
     
     // スコープを復元
     context.values = savedValues;

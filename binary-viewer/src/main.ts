@@ -1197,9 +1197,19 @@ const highlight = (element: HTMLElement, highlightRangeList: BinaryRange[]) => {
         ? parseInt(element.dataset.length!)
         : 1;
 
-    const highlightCount = highlightRangeList.filter(range => range.contains(offset, length))
-        .length;
+    const matchingRanges = highlightRangeList.filter(range => range.contains(offset, length));
+    const highlightCount = matchingRanges.length;
     element.dataset.highlight = highlightCount.toString();
+    
+    // Hexのセル（TD要素）にツールチップを設定
+    if (element.tagName === 'TD' && highlightCount > 0) {
+        const deepestRange = matchingRanges[matchingRanges.length - 1];
+        let titleText = deepestRange.name;
+        if (deepestRange.doc) {
+            titleText += `\n\n${deepestRange.doc}`;
+        }
+        element.title = titleText;
+    }
 }
 
 // XSS対策: HTMLエスケープ関数
@@ -1243,8 +1253,9 @@ const toHexTableHtmlString = (hexRange: BinaryRange, pageIndex: number = 0): str
 }
 
 const toStructureHtmlString = (segment: BinaryRange): string => {
+    const titleAttr = segment.doc ? ` title="${escapeHtml(segment.doc)}"` : '';
     return `
-<details data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0">
+<details data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0"${titleAttr}>
   <summary><span class="cancel-toggle"> ${escapeHtml(segment.name)} (${rangeToString(segment)})</span></summary>
     ${escapeHtml(segment.interpret())}
     ${segment.subRanges.reduce((acc, child) => acc + toStructureHtmlString(child), "")}
@@ -1333,6 +1344,14 @@ const ksyTextArea = document.querySelector<HTMLTextAreaElement>('#ksyText');
 if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFieldBtn) {
     // タブ切り替え
     tabRaw.addEventListener('click', () => {
+        // GUIからYAMLへ同期
+        if (typeof (window as any).generateYamlFromGui === 'function') {
+            const yaml = (window as any).generateYamlFromGui(true); // silent = true
+            if (yaml !== null) {
+                ksyTextArea!.value = yaml;
+            }
+        }
+
         tabRaw.classList.add('active');
         tabGui.classList.remove('active');
         tabRaw.style.background = '#1a73e8';
@@ -1346,6 +1365,61 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
     });
 
     tabGui.addEventListener('click', () => {
+        // YAMLからGUIへ同期
+        try {
+            const yamlText = ksyTextArea!.value.trim();
+            if (yamlText) {
+                const schema = parseKsySchema(yamlText);
+                
+                // メタ情報の同期
+                if (ksySaveNameInput && schema.meta.id) {
+                    ksySaveNameInput.value = schema.meta.id;
+                }
+                if (guiEndianSelect && schema.meta.endian) {
+                    guiEndianSelect.value = schema.meta.endian;
+                }
+                
+                // フィールドの同期
+                if (schema.seq && Array.isArray(schema.seq)) {
+                    guiFieldsContainer!.innerHTML = '';
+                    schema.seq.forEach((field: any) => {
+                        const row = createGuiFieldRow();
+                        
+                        const idInput = row.querySelector<HTMLInputElement>('.field-id');
+                        const typeSelect = row.querySelector<HTMLSelectElement>('.field-type');
+                        const sizeInput = row.querySelector<HTMLInputElement>('.field-size');
+                        const docInput = row.querySelector<HTMLTextAreaElement>('.field-doc');
+                        
+                        if (idInput && field.id) idInput.value = field.id;
+                        if (typeSelect && field.type) {
+                            // contentsなどの場合は対応していないためスキップされるか適当な値になる
+                            typeSelect.value = field.type;
+                        }
+                        if (sizeInput) {
+                            if (field.type === 'str' || field.type === 'strz') {
+                                sizeInput.disabled = false;
+                                sizeInput.value = field.size !== undefined ? String(field.size) : '';
+                            }
+                        }
+                        if (docInput && field.doc) {
+                            docInput.value = field.doc;
+                        }
+                        
+                        guiFieldsContainer!.appendChild(row);
+                    });
+                }
+                
+                // フィールドが空の場合は1行追加
+                if (guiFieldsContainer!.children.length === 0) {
+                    guiFieldsContainer!.appendChild(createGuiFieldRow());
+                }
+            }
+        } catch (e) {
+            if (!confirm('YAMLのパースエラーがあるため、GUIに正しく同期できません。このままGUIを開きますか？\nエラー: ' + (e instanceof Error ? e.message : String(e)))) {
+                return;
+            }
+        }
+
         tabGui.classList.add('active');
         tabRaw.classList.remove('active');
         tabGui.style.background = '#1a73e8';
@@ -1370,19 +1444,24 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
         row.style.borderRadius = '4px';
 
         row.innerHTML = `
-            <input type="text" class="field-id" placeholder="id (例: magic)" style="flex: 2; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" />
-            <select class="field-type" style="flex: 2; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">
-                <option value="u1">u1 (符号なし1byte)</option>
-                <option value="u2">u2 (符号なし2byte)</option>
-                <option value="u4">u4 (符号なし4byte)</option>
-                <option value="s1">s1 (符号あり1byte)</option>
-                <option value="s2">s2 (符号あり2byte)</option>
-                <option value="s4">s4 (符号あり4byte)</option>
-                <option value="str">str (文字列)</option>
-                <option value="strz">strz (NULL終端文字列)</option>
-            </select>
-            <input type="text" class="field-size" placeholder="size" disabled style="flex: 1; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="文字列等のサイズ指定(数値または式)" />
-            <button class="field-delete-btn" style="padding: 4px 8px; background: #ffebee; color: #d32f2f; border: 1px solid #ffcdd2; border-radius: 4px; cursor: pointer;">✕</button>
+            <div style="display: flex; flex-direction: column; flex: 1; gap: 4px;">
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <input type="text" class="field-id" placeholder="id (例: magic)" style="flex: 2; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" />
+                    <select class="field-type" style="flex: 2; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">
+                        <option value="u1">u1 (符号なし1byte)</option>
+                        <option value="u2">u2 (符号なし2byte)</option>
+                        <option value="u4">u4 (符号なし4byte)</option>
+                        <option value="s1">s1 (符号あり1byte)</option>
+                        <option value="s2">s2 (符号あり2byte)</option>
+                        <option value="s4">s4 (符号あり4byte)</option>
+                        <option value="str">str (文字列)</option>
+                        <option value="strz">strz (NULL終端文字列)</option>
+                    </select>
+                    <input type="text" class="field-size" placeholder="size" disabled style="flex: 1; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="文字列等のサイズ指定(数値または式)" />
+                    <button class="field-delete-btn" style="padding: 4px 8px; background: #ffebee; color: #d32f2f; border: 1px solid #ffcdd2; border-radius: 4px; cursor: pointer;">✕</button>
+                </div>
+                <textarea class="field-doc" placeholder="説明 (改行可能)" rows="2" style="width: 100%; min-height: 0 !important; flex: none !important; resize: vertical; padding: 4px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 11px; font-family: sans-serif; line-height: 1.3;"></textarea>
+            </div>
         `;
 
         // 型がstrの場合はsizeを有効化
@@ -1414,7 +1493,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
     });
 
     // GUIからYAMLを生成する関数（グローバルにエクスポートして保存ボタンからも呼べるようにする）
-    (window as any).generateYamlFromGui = (): string | null => {
+    (window as any).generateYamlFromGui = (silent: boolean = false): string | null => {
         const id = ksySaveNameInput?.value.trim() || 'my_format';
         const endian = guiEndianSelect?.value || 'le';
         
@@ -1424,41 +1503,52 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
 seq:
 `;
 
-        const rows = guiFieldsContainer.querySelectorAll('div');
+        const rows = Array.from(guiFieldsContainer.children);
         if (rows.length === 0) {
-            alert('フィールドがありません');
+            if (!silent) alert('フィールドがありません');
             return null;
         }
 
         let hasError = false;
-        rows.forEach(row => {
+        rows.forEach(rowElement => {
+            const row = rowElement as HTMLElement;
             const fieldIdInput = row.querySelector<HTMLInputElement>('.field-id');
             const fieldTypeSelect = row.querySelector<HTMLSelectElement>('.field-type');
             const fieldSizeInput = row.querySelector<HTMLInputElement>('.field-size');
+            const fieldDocInput = row.querySelector<HTMLTextAreaElement>('.field-doc');
             
             if (!fieldIdInput || !fieldTypeSelect) return;
 
             const fieldId = fieldIdInput.value.trim();
             const fieldType = fieldTypeSelect.value;
             const fieldSize = fieldSizeInput ? fieldSizeInput.value.trim() : '';
+            const fieldDoc = fieldDocInput ? fieldDocInput.value.trim() : '';
 
             if (!fieldId) {
-                hasError = true;
-                return;
+                if (!silent) hasError = true;
+                return; // サイレント同期時は空の行を無視する
             }
 
             yaml += `  - id: ${fieldId}\n    type: ${fieldType}\n`;
+            
+            if (fieldDoc) {
+                const indentedDoc = fieldDoc.split('\n').map(line => `      ${line}`).join('\n');
+                yaml += `    doc: |\n${indentedDoc}\n`;
+            }
+
             if (fieldType === 'str') {
                 if (!fieldSize) {
-                    alert(`フィールド "${fieldId}" (str) にはサイズ(数値またはフィールド参照)が必要です。`);
-                    hasError = true;
+                    if (!silent) {
+                        alert(`フィールド "${fieldId}" (str) にはサイズ(数値またはフィールド参照)が必要です。`);
+                        hasError = true;
+                    }
                 } else {
                     yaml += `    size: ${fieldSize}\n    encoding: UTF-8\n`;
                 }
             }
         });
 
-        if (hasError) {
+        if (hasError && !silent) {
             if (!confirm('一部のフィールド名が空、またはエラーがあります。このままYAMLに変換しますか？')) {
                 return null;
             }

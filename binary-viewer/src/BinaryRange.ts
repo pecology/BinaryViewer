@@ -5,12 +5,14 @@ export class BinaryRange {
     name: string;
     binaryInterpretType: BinaryInterpretType | null;
     subRanges: BinaryRange[];
+    doc?: string;
 
-    constructor(data: Uint8Array, name: string, binaryInterpretType: BinaryInterpretType | null, subRanges: BinaryRange[] = []) {
+    constructor(data: Uint8Array, name: string, binaryInterpretType: BinaryInterpretType | null, subRanges: BinaryRange[] = [], doc?: string) {
         this.data = data;
         this.name = name;
         this.binaryInterpretType = binaryInterpretType;
         this.subRanges = subRanges;
+        this.doc = doc;
     }
 
     interpret() {

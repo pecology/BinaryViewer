@@ -95,7 +95,24 @@ function parseObject(context: ParseContext, minIndent: number): YamlObject {
 
         context.index++;
 
-        if (valueStr === '') {
+        if (valueStr === '|') {
+            const stringLines: string[] = [];
+            let blockIndent = -1;
+            while (context.index < context.lines.length) {
+                const nextLine = context.lines[context.index];
+                if (nextLine.indent <= line.indent) {
+                    break;
+                }
+                if (blockIndent === -1) {
+                    blockIndent = nextLine.indent;
+                }
+                // ブロックインデント以降の文字列を取得
+                const text = nextLine.content.length >= blockIndent ? nextLine.content.substring(blockIndent) : nextLine.content.trim();
+                stringLines.push(text);
+                context.index++;
+            }
+            result[key] = stringLines.join('\n');
+        } else if (valueStr === '') {
             // 値がない場合は、次の行を見てオブジェクトか配列か判断
             if (context.index < context.lines.length) {
                 const nextLine = context.lines[context.index];
@@ -168,7 +185,23 @@ function parseArray(context: ParseContext, minIndent: number): YamlValue[] {
             const key = itemContent.substring(0, colonIndex).trim();
             const valueStr = itemContent.substring(colonIndex + 1).trim();
 
-            if (valueStr === '') {
+            if (valueStr === '|') {
+                const stringLines: string[] = [];
+                let blockIndent = -1;
+                while (context.index < context.lines.length) {
+                    const nextLine = context.lines[context.index];
+                    if (nextLine.indent <= line.indent) {
+                        break;
+                    }
+                    if (blockIndent === -1) {
+                        blockIndent = nextLine.indent;
+                    }
+                    const text = nextLine.content.length >= blockIndent ? nextLine.content.substring(blockIndent) : nextLine.content.trim();
+                    stringLines.push(text);
+                    context.index++;
+                }
+                obj[key] = stringLines.join('\n');
+            } else if (valueStr === '') {
                 // 値がない場合、次の行を見る
                 if (context.index < context.lines.length) {
                     const nextLine = context.lines[context.index];
@@ -211,7 +244,23 @@ function parseArray(context: ParseContext, minIndent: number): YamlValue[] {
 
                 context.index++;
 
-                if (nextValueStr === '') {
+                if (nextValueStr === '|') {
+                    const stringLines: string[] = [];
+                    let blockIndent = -1;
+                    while (context.index < context.lines.length) {
+                        const followingLine = context.lines[context.index];
+                        if (followingLine.indent <= nextLine.indent) {
+                            break;
+                        }
+                        if (blockIndent === -1) {
+                            blockIndent = followingLine.indent;
+                        }
+                        const text = followingLine.content.length >= blockIndent ? followingLine.content.substring(blockIndent) : followingLine.content.trim();
+                        stringLines.push(text);
+                        context.index++;
+                    }
+                    obj[nextKey] = stringLines.join('\n');
+                } else if (nextValueStr === '') {
                     if (context.index < context.lines.length) {
                         const followingLine = context.lines[context.index];
                         if (followingLine.indent > nextLine.indent) {
