@@ -1388,6 +1388,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                         const idInput = row.querySelector<HTMLInputElement>('.field-id');
                         const typeSelect = row.querySelector<HTMLSelectElement>('.field-type');
                         const sizeInput = row.querySelector<HTMLInputElement>('.field-size');
+                        const repeatInput = row.querySelector<HTMLInputElement>('.field-repeat');
                         const docInput = row.querySelector<HTMLTextAreaElement>('.field-doc');
                         
                         if (idInput && field.id) idInput.value = field.id;
@@ -1401,6 +1402,9 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                                 sizeInput.value = field.size !== undefined ? String(field.size) : '';
                             }
                         }
+                        if (repeatInput && field.repeat === 'expr' && field.repeatExpr !== undefined) {
+                            repeatInput.value = String(field.repeatExpr);
+                        }
                         if (docInput && field.doc) {
                             docInput.value = field.doc;
                         }
@@ -1413,6 +1417,9 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                 if (guiFieldsContainer!.children.length === 0) {
                     guiFieldsContainer!.appendChild(createGuiFieldRow());
                 }
+                
+                // 初回バリデーションを実行
+                validateGuiFields();
             }
         } catch (e) {
             if (!confirm('YAMLのパースエラーがあるため、GUIに正しく同期できません。このままGUIを開きますか？\nエラー: ' + (e instanceof Error ? e.message : String(e)))) {
@@ -1433,6 +1440,46 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
     });
 
     // フィールド行のHTMLを生成
+    // GUIのバリデーションをリアルタイムに行う関数
+    const validateGuiFields = () => {
+        if (!guiFieldsContainer) return;
+        
+        const rows = Array.from(guiFieldsContainer.children);
+        const allFieldIds = rows.map(rowElement => {
+            const input = (rowElement as HTMLElement).querySelector<HTMLInputElement>('.field-id');
+            return input ? input.value.trim() : '';
+        }).filter(id => id !== '');
+
+        rows.forEach(rowElement => {
+            const row = rowElement as HTMLElement;
+            const repeatInput = row.querySelector<HTMLInputElement>('.field-repeat');
+            if (repeatInput) {
+                const val = repeatInput.value.trim();
+                if (val !== '') {
+                    // 数値か、または他のフィールド名に存在するかチェック
+                    const isNumber = /^\d+$/.test(val);
+                    if (!isNumber && !allFieldIds.includes(val)) {
+                        repeatInput.style.borderColor = '#d32f2f';
+                        repeatInput.style.backgroundColor = '#ffebee';
+                        repeatInput.title = 'エラー: 数値または存在する他のフィールド名を入力してください';
+                    } else {
+                        repeatInput.style.borderColor = '#ccc';
+                        repeatInput.style.backgroundColor = '#fff';
+                        repeatInput.title = '配列にする場合の繰り返し回数（固定値またはフィールド名）';
+                    }
+                } else {
+                    repeatInput.style.borderColor = '#ccc';
+                    repeatInput.style.backgroundColor = '#fff';
+                    repeatInput.title = '配列にする場合の繰り返し回数（固定値またはフィールド名）';
+                }
+            }
+        });
+    };
+
+    if (guiFieldsContainer) {
+        guiFieldsContainer.addEventListener('input', validateGuiFields);
+    }
+
     const createGuiFieldRow = (): HTMLDivElement => {
         const row = document.createElement('div');
         row.style.display = 'flex';
@@ -1446,8 +1493,8 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
         row.innerHTML = `
             <div style="display: flex; flex-direction: column; flex: 1; gap: 4px;">
                 <div style="display: flex; gap: 6px; align-items: center;">
-                    <input type="text" class="field-id" placeholder="id (例: magic)" style="flex: 2; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" />
-                    <select class="field-type" style="flex: 2; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">
+                    <input type="text" class="field-id" placeholder="id (例: magic)" style="flex: 2; min-width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" />
+                    <select class="field-type" style="flex: 2; min-width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">
                         <option value="u1">u1 (符号なし1byte)</option>
                         <option value="u2">u2 (符号なし2byte)</option>
                         <option value="u4">u4 (符号なし4byte)</option>
@@ -1457,7 +1504,8 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                         <option value="str">str (文字列)</option>
                         <option value="strz">strz (NULL終端文字列)</option>
                     </select>
-                    <input type="text" class="field-size" placeholder="size" disabled style="flex: 1; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="文字列等のサイズ指定(数値または式)" />
+                    <input type="text" class="field-size" placeholder="size" disabled style="flex: 1; min-width: 40px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="文字列等のサイズ指定(数値または式)" />
+                    <input type="text" class="field-repeat" placeholder="回数 (任意)" style="flex: 1; min-width: 40px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="配列にする場合の繰り返し回数（固定値またはフィールド名）" />
                     <button class="field-delete-btn" style="padding: 4px 8px; background: #ffebee; color: #d32f2f; border: 1px solid #ffcdd2; border-radius: 4px; cursor: pointer;">✕</button>
                 </div>
                 <textarea class="field-doc" placeholder="説明 (改行可能)" rows="2" style="width: 100%; min-height: 0 !important; flex: none !important; resize: vertical; padding: 4px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 11px; font-family: sans-serif; line-height: 1.3;"></textarea>
@@ -1509,12 +1557,19 @@ seq:
             return null;
         }
 
+        // 事前にすべてのフィールドIDを収集
+        const allFieldIds = rows.map(rowElement => {
+            const input = (rowElement as HTMLElement).querySelector<HTMLInputElement>('.field-id');
+            return input ? input.value.trim() : '';
+        }).filter(id => id !== '');
+
         let hasError = false;
         rows.forEach(rowElement => {
             const row = rowElement as HTMLElement;
             const fieldIdInput = row.querySelector<HTMLInputElement>('.field-id');
             const fieldTypeSelect = row.querySelector<HTMLSelectElement>('.field-type');
             const fieldSizeInput = row.querySelector<HTMLInputElement>('.field-size');
+            const fieldRepeatInput = row.querySelector<HTMLInputElement>('.field-repeat');
             const fieldDocInput = row.querySelector<HTMLTextAreaElement>('.field-doc');
             
             if (!fieldIdInput || !fieldTypeSelect) return;
@@ -1522,6 +1577,7 @@ seq:
             const fieldId = fieldIdInput.value.trim();
             const fieldType = fieldTypeSelect.value;
             const fieldSize = fieldSizeInput ? fieldSizeInput.value.trim() : '';
+            const fieldRepeat = fieldRepeatInput ? fieldRepeatInput.value.trim() : '';
             const fieldDoc = fieldDocInput ? fieldDocInput.value.trim() : '';
 
             if (!fieldId) {
@@ -1530,6 +1586,17 @@ seq:
             }
 
             yaml += `  - id: ${fieldId}\n    type: ${fieldType}\n`;
+            
+            if (fieldRepeat) {
+                const isNumber = /^\d+$/.test(fieldRepeat);
+                if (!isNumber && !allFieldIds.includes(fieldRepeat)) {
+                    if (!silent) {
+                        alert(`フィールド "${fieldId}" の回数指定 "${fieldRepeat}" が不正です。\n数値、または存在する他のフィールド名を入力してください。`);
+                        hasError = true;
+                    }
+                }
+                yaml += `    repeat: expr\n    repeat-expr: ${fieldRepeat}\n`;
+            }
             
             if (fieldDoc) {
                 const indentedDoc = fieldDoc.split('\n').map(line => `      ${line}`).join('\n');
