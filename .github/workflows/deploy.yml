@@ -40,6 +40,12 @@ jobs:
         working-directory: binary-viewer
         run: npm run build
 
+      - name: Upload Single HTML Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BinaryViewer-Standalone
+          path: binary-viewer/dist/index.html
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 

@@ -1,12 +1,14 @@
 import { defineConfig } from 'vite'
 
+import { viteSingleFile } from 'vite-plugin-singlefile'
+
 export default defineConfig({
-  // GitHub Pagesのサブディレクトリにデプロイする場合のベースパス
-  // リポジトリ名に合わせて変更してください（例: /BinaryViewer/）
-  base: '/BinaryViewer/',
+  // ローカルでHTMLを開く場合やGitHub Pagesでも動くように相対パスにする
+  base: './',
+  plugins: [viteSingleFile()],
   build: {
     outDir: 'dist',
-    // ソースマップを生成（本番でもTSファイルでデバッグ可能に）
-    sourcemap: true,
+    // 1ファイルに固めるためソースマップは無効化（軽量化のため）
+    sourcemap: false,
   },
 })
