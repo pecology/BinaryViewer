@@ -4,6 +4,7 @@
  */
 
 import { BinaryRange } from '../BinaryRange';
+import { loadKsy } from '../ksyStorage';
 import type { BinaryInterpretType } from '../BinaryInterpretType';
 import type {
     KsySchema,
@@ -372,6 +373,34 @@ function parseSingleField(
     if (isUserDefinedType(typeName, context.schema)) {
         const userType = context.schema.types![typeName];
         return parseUserType(context, userType, displayName);
+    }
+
+    // 外部スキーマを試す
+    const externalKsyText = loadKsy(typeName);
+    if (externalKsyText) {
+        try {
+            const externalSchema = parseKsySchema(externalKsyText);
+            
+            // 外部スキーマのコンテキストを一時的に設定
+            const originalEndian = context.defaultEndian;
+            const originalSchema = context.schema;
+            
+            if (externalSchema.meta && externalSchema.meta.endian) {
+                context.defaultEndian = externalSchema.meta.endian;
+            }
+            context.schema = externalSchema;
+            
+            // externalSchema は seq を持つため、KsyType と互換がある
+            const result = parseUserType(context, externalSchema as unknown as KsyType, displayName);
+            
+            // コンテキストを元に戻す
+            context.defaultEndian = originalEndian;
+            context.schema = originalSchema;
+            
+            return result;
+        } catch (e) {
+            throw new Error(`Failed to parse external schema "${typeName}": ${e instanceof Error ? e.message : String(e)}`);
+        }
     }
 
     throw new Error(`Unknown type: ${typeName}`);

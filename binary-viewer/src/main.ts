@@ -1386,15 +1386,14 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                         const row = createGuiFieldRow();
                         
                         const idInput = row.querySelector<HTMLInputElement>('.field-id');
-                        const typeSelect = row.querySelector<HTMLSelectElement>('.field-type');
+                        const typeInput = row.querySelector<HTMLInputElement>('.field-type');
                         const sizeInput = row.querySelector<HTMLInputElement>('.field-size');
                         const repeatInput = row.querySelector<HTMLInputElement>('.field-repeat');
                         const docInput = row.querySelector<HTMLTextAreaElement>('.field-doc');
                         
                         if (idInput && field.id) idInput.value = field.id;
-                        if (typeSelect && field.type) {
-                            // contentsなどの場合は対応していないためスキップされるか適当な値になる
-                            typeSelect.value = field.type;
+                        if (typeInput && field.type) {
+                            typeInput.value = field.type;
                         }
                         if (sizeInput) {
                             if (field.type === 'str' || field.type === 'strz') {
@@ -1421,6 +1420,27 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                 // 初回バリデーションを実行
                 validateGuiFields();
             }
+            
+            // datalist（オートコンプリート）の更新
+            let dataList = document.getElementById('type-options');
+            if (!dataList) {
+                dataList = document.createElement('datalist');
+                dataList.id = 'type-options';
+                document.body.appendChild(dataList);
+            }
+            const customSchemas = listKsyNames();
+            dataList.innerHTML = `
+                <option value="u1">符号なし1byte</option>
+                <option value="u2">符号なし2byte</option>
+                <option value="u4">符号なし4byte</option>
+                <option value="s1">符号あり1byte</option>
+                <option value="s2">符号あり2byte</option>
+                <option value="s4">符号あり4byte</option>
+                <option value="str">文字列</option>
+                <option value="strz">NULL終端文字列</option>
+                ${customSchemas.map(name => `<option value="${name}">保存済みスキーマ</option>`).join('')}
+            `;
+            
         } catch (e) {
             if (!confirm('YAMLのパースエラーがあるため、GUIに正しく同期できません。このままGUIを開きますか？\nエラー: ' + (e instanceof Error ? e.message : String(e)))) {
                 return;
@@ -1494,16 +1514,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
             <div style="display: flex; flex-direction: column; flex: 1; gap: 4px;">
                 <div style="display: flex; gap: 6px; align-items: center;">
                     <input type="text" class="field-id" placeholder="id (例: magic)" style="flex: 2; min-width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" />
-                    <select class="field-type" style="flex: 2; min-width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">
-                        <option value="u1">u1 (符号なし1byte)</option>
-                        <option value="u2">u2 (符号なし2byte)</option>
-                        <option value="u4">u4 (符号なし4byte)</option>
-                        <option value="s1">s1 (符号あり1byte)</option>
-                        <option value="s2">s2 (符号あり2byte)</option>
-                        <option value="s4">s4 (符号あり4byte)</option>
-                        <option value="str">str (文字列)</option>
-                        <option value="strz">strz (NULL終端文字列)</option>
-                    </select>
+                    <input type="text" list="type-options" class="field-type" placeholder="type (例: u1, png)" style="flex: 2; min-width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" />
                     <input type="text" class="field-size" placeholder="size" disabled style="flex: 1; min-width: 40px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="文字列等のサイズ指定(数値または式)" />
                     <input type="text" class="field-repeat" placeholder="回数 (任意)" style="flex: 1; min-width: 40px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="配列にする場合の繰り返し回数（固定値またはフィールド名）" />
                     <button class="field-delete-btn" style="padding: 4px 8px; background: #ffebee; color: #d32f2f; border: 1px solid #ffcdd2; border-radius: 4px; cursor: pointer;">✕</button>
@@ -1512,11 +1523,11 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
             </div>
         `;
 
-        // 型がstrの場合はsizeを有効化
-        const typeSelect = row.querySelector<HTMLSelectElement>('.field-type')!;
+        // 型がstr/strzの場合はsizeを有効化
+        const typeInput = row.querySelector<HTMLInputElement>('.field-type')!;
         const sizeInput = row.querySelector<HTMLInputElement>('.field-size')!;
-        typeSelect.addEventListener('change', () => {
-            if (typeSelect.value === 'str') {
+        typeInput.addEventListener('change', () => {
+            if (typeInput.value === 'str' || typeInput.value === 'strz') {
                 sizeInput.disabled = false;
             } else {
                 sizeInput.disabled = true;
@@ -1567,15 +1578,15 @@ seq:
         rows.forEach(rowElement => {
             const row = rowElement as HTMLElement;
             const fieldIdInput = row.querySelector<HTMLInputElement>('.field-id');
-            const fieldTypeSelect = row.querySelector<HTMLSelectElement>('.field-type');
+            const fieldTypeInput = row.querySelector<HTMLInputElement>('.field-type');
             const fieldSizeInput = row.querySelector<HTMLInputElement>('.field-size');
             const fieldRepeatInput = row.querySelector<HTMLInputElement>('.field-repeat');
             const fieldDocInput = row.querySelector<HTMLTextAreaElement>('.field-doc');
             
-            if (!fieldIdInput || !fieldTypeSelect) return;
+            if (!fieldIdInput || !fieldTypeInput) return;
 
             const fieldId = fieldIdInput.value.trim();
-            const fieldType = fieldTypeSelect.value;
+            const fieldType = fieldTypeInput.value.trim();
             const fieldSize = fieldSizeInput ? fieldSizeInput.value.trim() : '';
             const fieldRepeat = fieldRepeatInput ? fieldRepeatInput.value.trim() : '';
             const fieldDoc = fieldDocInput ? fieldDocInput.value.trim() : '';
