@@ -114,6 +114,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
                         <option value="le">Little Endian (le)</option>
                         <option value="be">Big Endian (be)</option>
                     </select>
+                    <label style="font-weight: bold; font-size: 13px; margin-left: 10px;">Category:</label>
+                    <input type="text" id="ksy-gui-category" placeholder="グループ名" style="padding: 4px; flex: 1; border: 1px solid #ccc; border-radius: 4px; max-width: 150px;" />
                 </div>
                 <h4 style="margin: 0 0 8px 0; font-size: 13px; color: #333;">Fields (seq)</h4>
                 <div id="ksy-gui-fields" style="display: flex; flex-direction: column; gap: 8px;"></div>
@@ -167,11 +169,37 @@ function updateParserSelect(selectedValue?: string): void {
     // 保存済みKSYスキーマ
     const ksyNames = listKsyNames();
     if (ksyNames.length > 0) {
-        html += `<optgroup label="KSYスキーマ">`;
+        const groups: Record<string, string[]> = {
+            'KSYスキーマ': []
+        };
         ksyNames.forEach(name => {
-            html += `<option value="ksy:${name}">📄 ${name}</option>`;
+            let category = 'KSYスキーマ';
+            const content = loadKsy(name);
+            if (content) {
+                try {
+                    const schema = parseKsySchema(content);
+                    if (schema.meta && schema.meta.category) {
+                        category = schema.meta.category;
+                    }
+                } catch(e) {
+                    // パース失敗時はデフォルト
+                }
+            }
+            if (!groups[category]) {
+                groups[category] = [];
+            }
+            groups[category].push(name);
         });
-        html += `</optgroup>`;
+        
+        for (const [groupName, names] of Object.entries(groups)) {
+            if (names.length > 0) {
+                html += `<optgroup label="${groupName}">`;
+                names.forEach(name => {
+                    html += `<option value="ksy:${name}">📄 ${name}</option>`;
+                });
+                html += `</optgroup>`;
+            }
+        }
     }
     
     select.innerHTML = html;
@@ -1378,6 +1406,10 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                 if (guiEndianSelect && schema.meta.endian) {
                     guiEndianSelect.value = schema.meta.endian;
                 }
+                const categoryInput = document.querySelector<HTMLInputElement>('#ksy-gui-category');
+                if (categoryInput) {
+                    categoryInput.value = schema.meta.category || '';
+                }
                 
                 // フィールドの同期
                 if (schema.seq && Array.isArray(schema.seq)) {
@@ -1559,12 +1591,16 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
     (window as any).generateYamlFromGui = (silent: boolean = false): string | null => {
         const id = ksySaveNameInput?.value.trim() || 'my_format';
         const endian = guiEndianSelect?.value || 'le';
+        const categoryInput = document.querySelector<HTMLInputElement>('#ksy-gui-category');
+        const category = categoryInput?.value.trim() || '';
         
         let yaml = `meta:
   id: ${id}
-  endian: ${endian}
-seq:
-`;
+  endian: ${endian}`;
+        if (category) {
+            yaml += `\n  category: ${category}`;
+        }
+        yaml += `\nseq:\n`;
 
         const rows = Array.from(guiFieldsContainer.children);
         if (rows.length === 0) {
