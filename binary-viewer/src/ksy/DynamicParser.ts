@@ -6,6 +6,7 @@
 import { BinaryRange } from '../BinaryRange';
 import { loadKsy } from '../ksyStorage';
 import type { BinaryInterpretType } from '../BinaryInterpretType';
+import { HexEncoding } from '../BinaryInterpretType';
 import type {
     KsySchema,
     KsyField,
@@ -169,8 +170,8 @@ function convertToKsyField(obj: YamlValue): KsyField {
     const contents = fieldObj['contents'];
     const hasContents = Array.isArray(contents);
     
-    // 文字列型判定
-    const isStr = type === 'str' || type === 'strz';
+    // 文字列型・hex型判定
+    const isStr = type === 'str' || type === 'strz' || type === 'hex';
     
     // size, encoding
     const size = fieldObj['size'];
@@ -194,11 +195,11 @@ function convertToKsyField(obj: YamlValue): KsyField {
     }
 
     if (isStr) {
-        // StringField
+        // StringField / HexField
         const strField: KsyField = hasRepeat
             ? {
                 id,
-                type: type as 'str' | 'strz',
+                type: type as 'str' | 'strz' | 'hex',
                 size: typeof size === 'number' || typeof size === 'string' ? size : undefined,
                 encoding: typeof encoding === 'string' ? encoding : undefined,
                 repeat: 'expr' as const,
@@ -207,7 +208,7 @@ function convertToKsyField(obj: YamlValue): KsyField {
             }
             : {
                 id,
-                type: type as 'str' | 'strz',
+                type: type as 'str' | 'strz' | 'hex',
                 size: typeof size === 'number' || typeof size === 'string' ? size : undefined,
                 encoding: typeof encoding === 'string' ? encoding : undefined,
                 doc,
@@ -342,6 +343,22 @@ function parseSingleField(
 
     // 文字列型（型ガードを使用）
     if (isStringField(field)) {
+        if (field.type === 'hex') {
+            if (field.size === undefined) {
+                throw new Error(`Field "${displayName}": hex type requires size`);
+            }
+            const size = resolveExpr(context, field.size);
+            const value = Array.from(new Uint8Array(context.buffer, startOffset, size))
+                .map(b => b.toString(16).padStart(2, '0').toUpperCase())
+                .join('');
+            context.offset += size;
+            
+            const data = new Uint8Array(context.buffer, startOffset, size);
+            const interpretType = new HexEncoding();
+            const range = new BinaryRange(data, displayName, interpretType, [], field.doc);
+            return [range, value];
+        }
+
         const encoding = field.encoding ?? context.defaultEncoding;
 
         if (field.type === 'strz') {

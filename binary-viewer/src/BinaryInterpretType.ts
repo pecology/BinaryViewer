@@ -114,6 +114,15 @@ export class TextEncoding implements BinaryInterpretType {
     }
 }
 
+export class HexEncoding implements BinaryInterpretType {
+    toString(): string {
+        return "Hex";
+    }
+    interpret(bytes: Uint8Array): string {
+        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
+    }
+}
+
 export class ZipDate implements BinaryInterpretType {
     toString(): string {
         return "ZipDate";

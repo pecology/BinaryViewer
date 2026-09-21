@@ -1396,9 +1396,12 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                             typeInput.value = field.type;
                         }
                         if (sizeInput) {
-                            if (field.type === 'str' || field.type === 'strz') {
+                            if (field.type === 'str' || field.type === 'strz' || field.type === 'hex') {
                                 sizeInput.disabled = false;
                                 sizeInput.value = field.size !== undefined ? String(field.size) : '';
+                            } else {
+                                sizeInput.disabled = true;
+                                sizeInput.value = '';
                             }
                         }
                         if (repeatInput && field.repeat === 'expr' && field.repeatExpr !== undefined) {
@@ -1438,6 +1441,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                 <option value="s4">符号あり4byte</option>
                 <option value="str">文字列</option>
                 <option value="strz">NULL終端文字列</option>
+                <option value="hex">16進数文字列</option>
                 ${customSchemas.map(name => `<option value="${name}">保存済みスキーマ</option>`).join('')}
             `;
             
@@ -1523,11 +1527,11 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
             </div>
         `;
 
-        // 型がstr/strzの場合はsizeを有効化
+        // 型がstr/strz/hexの場合はsizeを有効化
         const typeInput = row.querySelector<HTMLInputElement>('.field-type')!;
         const sizeInput = row.querySelector<HTMLInputElement>('.field-size')!;
-        typeInput.addEventListener('change', () => {
-            if (typeInput.value === 'str' || typeInput.value === 'strz') {
+        typeInput.addEventListener('input', () => {
+            if (typeInput.value === 'str' || typeInput.value === 'strz' || typeInput.value === 'hex') {
                 sizeInput.disabled = false;
             } else {
                 sizeInput.disabled = true;
@@ -1614,15 +1618,23 @@ seq:
                 yaml += `    doc: |\n${indentedDoc}\n`;
             }
 
-            if (fieldType === 'str') {
+            if (fieldType === 'str' || fieldType === 'hex') {
                 if (!fieldSize) {
                     if (!silent) {
-                        alert(`フィールド "${fieldId}" (str) にはサイズ(数値またはフィールド参照)が必要です。`);
+                        alert(`フィールド "${fieldId}" (${fieldType}) にはサイズ(数値またはフィールド参照)が必要です。`);
                         hasError = true;
                     }
                 } else {
-                    yaml += `    size: ${fieldSize}\n    encoding: UTF-8\n`;
+                    yaml += `    size: ${fieldSize}\n`;
+                    if (fieldType === 'str') {
+                        yaml += `    encoding: UTF-8\n`;
+                    }
                 }
+            } else if (fieldType === 'strz') {
+                if (fieldSize) {
+                    yaml += `    size: ${fieldSize}\n`;
+                }
+                yaml += `    encoding: UTF-8\n`;
             }
         });
 
