@@ -244,6 +244,14 @@ function updateKsySchemaList(): void {
                 // 選択状態を表示
                 list.querySelectorAll('.ksy-list-item').forEach(i => i.classList.remove('selected'));
                 item.classList.add('selected');
+                
+                // もしGUIビルダーが表示中であれば、GUIのフィールドも最新の内容で同期する
+                const tabGui = document.querySelector<HTMLButtonElement>('#ksy-tab-gui');
+                if (tabGui && tabGui.classList.contains('active')) {
+                    if (typeof (window as any).syncYamlToGui === 'function') {
+                        (window as any).syncYamlToGui();
+                    }
+                }
             }
         });
     });
@@ -1392,7 +1400,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
         guiEditor.style.display = 'none';
     });
 
-    tabGui.addEventListener('click', () => {
+    (window as any).syncYamlToGui = () => {
         // YAMLからGUIへ同期
         try {
             const yamlText = ksyTextArea!.value.trim();
@@ -1478,11 +1486,16 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
             `;
             
         } catch (e) {
-            if (!confirm('YAMLのパースエラーがあるため、GUIに正しく同期できません。このままGUIを開きますか？\nエラー: ' + (e instanceof Error ? e.message : String(e)))) {
+            if (!confirm('YAMLのパースエラーがあるため、GUIに正しく同期できません。このままGUIを開きますか？\\nエラー: ' + (e instanceof Error ? e.message : String(e)))) {
                 return;
             }
         }
+    };
 
+    tabGui.addEventListener('click', () => {
+        if (typeof (window as any).syncYamlToGui === 'function') {
+            (window as any).syncYamlToGui();
+        }
         tabGui.classList.add('active');
         tabRaw.classList.remove('active');
         tabGui.style.background = '#1a73e8';
