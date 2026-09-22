@@ -47,7 +47,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <select id="parser-select">
               <!-- 動的に生成 -->
           </select>
-          <button id="ksy-manage-btn" title="KSYスキーマ管理">📝 KSY管理</button>
+          <button id="ksy-manage-btn" title="パーサー管理">📝 パーサー管理</button>
           <button id="link-ext-btn" title="この拡張子に紐づける">🔗 拡張子に紐づけ</button>
           <div id="ext-mapping-info" class="ext-mapping-info"></div>
           <details class="ext-mapping-list">
@@ -71,11 +71,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     </div>
   </div>
   
-  <!-- KSYスキーマ管理モーダル -->
+  <!-- パーサー管理モーダル -->
   <div id="ksy-modal" class="modal-overlay" style="display: none;">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>📝 KSYスキーマ管理</h3>
+        <h3>📝 パーサー管理</h3>
         <button id="ksy-modal-close" class="modal-close">&times;</button>
       </div>
       <div class="modal-body">
@@ -83,7 +83,6 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <div class="ksy-list-panel">
             <h4>保存済みスキーマ</h4>
             <ul id="ksy-schema-list" class="ksy-schema-list"></ul>
-            <button id="ksy-new-btn" class="ksy-new-btn">+ 新規作成</button>
           </div>
           <div class="ksy-edit-panel">
             <div class="ksy-edit-header">
@@ -288,19 +287,7 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// 新規作成ボタン
-document.querySelector<HTMLButtonElement>('#ksy-new-btn')!.addEventListener('click', () => {
-    document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = '';
-    document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = `meta:
-  id: my_format
-  endian: le
-seq:
-  - id: magic
-    type: u4`;
-    // 選択状態をクリア
-    document.querySelectorAll('.ksy-list-item').forEach(i => i.classList.remove('selected'));
-});
-
+// (新規作成ボタンは削除されました)
 // パーサー選択時に再パース
 document.querySelector<HTMLSelectElement>('#parser-select')!.addEventListener('change', (e) => {
     const select = e.target as HTMLSelectElement;
@@ -1380,6 +1367,7 @@ const ksyTextArea = document.querySelector<HTMLTextAreaElement>('#ksyText');
 if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFieldBtn) {
     // タブ切り替え
     tabRaw.addEventListener('click', () => {
+        if (tabRaw.classList.contains('active')) return;
         // GUIからYAMLへ同期
         if (typeof (window as any).generateYamlFromGui === 'function') {
             const yaml = (window as any).generateYamlFromGui(true); // silent = true
