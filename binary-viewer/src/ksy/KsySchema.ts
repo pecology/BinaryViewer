@@ -33,6 +33,8 @@ interface KsyFieldBase {
     id: string;
     /** ドキュメント（説明） */
     doc?: string;
+    /** 条件式（if） */
+    if?: string;
 }
 
 /** 繰り返し設定（配列フィールド用） */

@@ -178,12 +178,17 @@ function convertToKsyField(obj: YamlValue): KsyField {
     const size = fieldObj['size'];
     const encoding = fieldObj['encoding'];
 
+    // 条件式（if）
+    const ifExpr = fieldObj['if'] !== undefined ? String(fieldObj['if']) : undefined;
+
+    let result: KsyField;
+
     // 適切な型を構築して返す
     if (hasContents) {
         // ContentsField
         const contentsArray = contents.filter((v): v is number => typeof v === 'number');
         if (hasRepeat) {
-            return {
+            result = {
                 id,
                 type,
                 contents: contentsArray,
@@ -191,14 +196,13 @@ function convertToKsyField(obj: YamlValue): KsyField {
                 repeatExpr: repeatExpr as number | string,
                 doc,
             };
+        } else {
+            result = { id, type, contents: contentsArray, doc };
         }
-        return { id, type, contents: contentsArray, doc };
-    }
-
-    if (isStr) {
+    } else if (isStr) {
         // StringField / HexField
-        const strField: KsyField = hasRepeat
-            ? {
+        if (hasRepeat) {
+            result = {
                 id,
                 type: type as 'str' | 'strz' | 'hex',
                 size: typeof size === 'number' || typeof size === 'string' ? size : undefined,
@@ -206,28 +210,36 @@ function convertToKsyField(obj: YamlValue): KsyField {
                 repeat: 'expr' as const,
                 repeatExpr: repeatExpr as number | string,
                 doc,
-            }
-            : {
+            };
+        } else {
+            result = {
                 id,
                 type: type as 'str' | 'strz' | 'hex',
                 size: typeof size === 'number' || typeof size === 'string' ? size : undefined,
                 encoding: typeof encoding === 'string' ? encoding : undefined,
                 doc,
             };
-        return strField;
+        }
+    } else {
+        // PrimitiveField または UserTypeField
+        if (hasRepeat) {
+            result = {
+                id,
+                type,
+                repeat: 'expr' as const,
+                repeatExpr: repeatExpr as number | string,
+                doc,
+            };
+        } else {
+            result = { id, type, doc };
+        }
     }
 
-    // PrimitiveField または UserTypeField
-    if (hasRepeat) {
-        return {
-            id,
-            type,
-            repeat: 'expr' as const,
-            repeatExpr: repeatExpr as number | string,
-            doc,
-        };
+    if (ifExpr !== undefined) {
+        (result as any).if = ifExpr;
     }
-    return { id, type, doc };
+
+    return result;
 }
 
 function convertToKsyType(obj: YamlObject): KsyType {
@@ -281,7 +293,11 @@ export function parseBinary(data: ArrayBuffer, schema: KsySchema): ParseResult {
 /**
  * フィールドをパースしてBinaryRangeを返す
  */
-function parseField(context: ParseContext, field: KsyField): BinaryRange[] {
+function parseField(context: ParseContext, field: KsyField & { if?: string }): BinaryRange[] {
+    if (field.if && !evaluateCondition(context, field.if)) {
+        return [];
+    }
+
     // 繰り返し処理（配列フィールド）
     if (isArrayField(field)) {
         const repeatExpr = getRepeatExpr(field);
@@ -474,6 +490,30 @@ function resolveExpr(context: ParseContext, expr: number | string): number {
     }
 
     throw new Error(`Cannot resolve expression "${expr}": not a number`);
+}
+
+/**
+ * 条件式（if）を評価
+ */
+function evaluateCondition(context: ParseContext, expr: string): boolean {
+    if (!expr) return true;
+
+    // KSYの論理演算子をJSの演算子に変換
+    let jsExpr = expr
+        .replace(/\band\b/g, '&&')
+        .replace(/\bor\b/g, '||');
+
+    // 変数スコープを構築して評価
+    const keys = Object.keys(context.values);
+    const vals = Object.values(context.values);
+
+    try {
+        const func = new Function(...keys, `return !!(${jsExpr});`);
+        return func(...vals);
+    } catch (e) {
+        console.warn(`Failed to evaluate condition: ${expr}`, e);
+        return false;
+    }
 }
 
 /**
