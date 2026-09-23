@@ -81,6 +81,17 @@ export interface KsyStringField extends KsyFieldBase {
  */
 export interface KsyStringArrayField extends KsyStringField, WithRepeat {}
 
+/** 固定長の生バイト列フィールド */
+export interface KsyBytesField extends KsyFieldBase {
+    /** 型名 */
+    type: 'bytes';
+    /** 読み取るバイト数（数値またはフィールド参照） */
+    size: number | string;
+}
+
+/** 固定長の生バイト列フィールド（配列版） */
+export interface KsyBytesArrayField extends KsyBytesField, WithRepeat {}
+
 /**
  * プリミティブ型フィールド（u1, u2, s4など）
  */
@@ -118,6 +129,8 @@ export type KsyField =
     | KsyContentsArrayField
     | KsyStringField
     | KsyStringArrayField
+    | KsyBytesField
+    | KsyBytesArrayField
     | KsyPrimitiveField
     | KsyPrimitiveArrayField
     | KsyUserTypeField
@@ -137,8 +150,13 @@ export function isStringField(field: KsyField): field is KsyStringField | KsyStr
     return field.type === 'str' || field.type === 'strz' || field.type === 'hex';
 }
 
+/** 生バイト列フィールドかどうか */
+export function isBytesField(field: KsyField): field is KsyBytesField | KsyBytesArrayField {
+    return field.type === 'bytes';
+}
+
 /** 配列フィールドかどうか */
-export function isArrayField(field: KsyField): field is KsyContentsArrayField | KsyStringArrayField | KsyPrimitiveArrayField | KsyUserTypeArrayField {
+export function isArrayField(field: KsyField): field is KsyContentsArrayField | KsyStringArrayField | KsyBytesArrayField | KsyPrimitiveArrayField | KsyUserTypeArrayField {
     return 'repeat' in field && field.repeat !== undefined;
 }
 

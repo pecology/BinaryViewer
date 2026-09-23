@@ -17,6 +17,7 @@ import {
     parsePrimitiveType,
     isUserDefinedType,
     isStringField,
+    isBytesField,
     isContentsField,
     isArrayField,
     getRepeatExpr,
@@ -173,6 +174,7 @@ function convertToKsyField(obj: YamlValue): KsyField {
     
     // 文字列型・hex型判定
     const isStr = type === 'str' || type === 'strz' || type === 'hex';
+    const isBytes = type === 'bytes';
     
     // size, encoding
     const size = fieldObj['size'];
@@ -220,6 +222,22 @@ function convertToKsyField(obj: YamlValue): KsyField {
                 encoding: typeof encoding === 'string' ? encoding : undefined,
                 doc,
             };
+        }
+    } else if (isBytes) {
+        if (typeof size !== 'number' && typeof size !== 'string') {
+            throw new Error(`Field "${id}": bytes type requires size`);
+        }
+        if (hasRepeat) {
+            result = {
+                id,
+                type: 'bytes',
+                size,
+                repeat: 'expr' as const,
+                repeatExpr: repeatExpr as number | string,
+                doc,
+            };
+        } else {
+            result = { id, type: 'bytes', size, doc };
         }
     } else {
         // PrimitiveField または UserTypeField
@@ -414,6 +432,17 @@ function parseSingleField(
             const range = new BinaryRange(data, displayName, interpretType, [], field.doc);
             return [range, value];
         }
+    }
+
+    if (isBytesField(field)) {
+        const size = resolveExpr(context, field.size);
+        const value = new Uint8Array(context.buffer, startOffset, size);
+        if (shouldConsume) {
+            context.offset += size;
+        }
+
+        const range = new BinaryRange(value, displayName, new HexEncoding(), [], field.doc);
+        return [range, value];
     }
 
     // ユーザー定義型

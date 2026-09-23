@@ -1438,7 +1438,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                             typeInput.value = field.type;
                         }
                         if (sizeInput) {
-                            if (field.type === 'str' || field.type === 'strz' || field.type === 'hex') {
+                            if (field.type === 'str' || field.type === 'strz' || field.type === 'hex' || field.type === 'bytes') {
                                 sizeInput.disabled = false;
                                 sizeInput.value = field.size !== undefined ? String(field.size) : '';
                             } else {
@@ -1490,6 +1490,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                 <option value="str">文字列</option>
                 <option value="strz">NULL終端文字列</option>
                 <option value="hex">16進数文字列</option>
+                <option value="bytes">バイト配列</option>
                 ${customSchemas.map(name => `<option value="${name}">保存済みスキーマ</option>`).join('')}
             `;
             
@@ -1586,11 +1587,11 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
             </div>
         `;
 
-        // 型がstr/strz/hexの場合はsizeを有効化
+        // 型がstr/strz/hex/bytesの場合はsizeを有効化
         const typeInput = row.querySelector<HTMLInputElement>('.field-type')!;
         const sizeInput = row.querySelector<HTMLInputElement>('.field-size')!;
         typeInput.addEventListener('input', () => {
-            if (typeInput.value === 'str' || typeInput.value === 'strz' || typeInput.value === 'hex') {
+            if (typeInput.value === 'str' || typeInput.value === 'strz' || typeInput.value === 'hex' || typeInput.value === 'bytes') {
                 sizeInput.disabled = false;
             } else {
                 sizeInput.disabled = true;
@@ -1692,7 +1693,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                 yaml += `    doc: |\n${indentedDoc}\n`;
             }
 
-            if (fieldType === 'str' || fieldType === 'hex') {
+            if (fieldType === 'str' || fieldType === 'hex' || fieldType === 'bytes') {
                 if (!fieldSize) {
                     if (!silent) {
                         alert(`フィールド "${fieldId}" (${fieldType}) にはサイズ(数値またはフィールド参照)が必要です。`);
