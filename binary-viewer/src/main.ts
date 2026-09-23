@@ -1418,6 +1418,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                         const sizeInput = row.querySelector<HTMLInputElement>('.field-size');
                         const repeatInput = row.querySelector<HTMLInputElement>('.field-repeat');
                         const ifInput = row.querySelector<HTMLInputElement>('.field-if');
+                        const consumeInput = row.querySelector<HTMLInputElement>('.field-consume');
                         const docInput = row.querySelector<HTMLTextAreaElement>('.field-doc');
                         
                         if (idInput && field.id) idInput.value = field.id;
@@ -1438,6 +1439,9 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                         }
                         if (ifInput && field.if !== undefined) {
                             ifInput.value = String(field.if);
+                        }
+                        if (consumeInput) {
+                            consumeInput.checked = field.consume !== false;
                         }
                         if (docInput && field.doc) {
                             docInput.value = field.doc;
@@ -1543,6 +1547,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
 
     const createGuiFieldRow = (): HTMLDivElement => {
         const row = document.createElement('div');
+        row.classList.add('gui-field-row');
         row.style.display = 'flex';
         row.style.gap = '6px';
         row.style.alignItems = 'center';
@@ -1559,6 +1564,10 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                     <input type="text" class="field-size" placeholder="size" disabled style="flex: 1; min-width: 40px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="文字列等のサイズ指定(数値または式)" />
                     <input type="text" class="field-repeat" placeholder="回数 (任意)" style="flex: 1; min-width: 40px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="配列にする場合の繰り返し回数（固定値またはフィールド名）" />
                     <input type="text" class="field-if" placeholder="if (条件)" style="flex: 1; min-width: 40px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="条件付きパース (例: field == 1)" />
+                    <label style="display:flex; align-items:center; gap:4px; white-space:nowrap; font-size:12px;">
+                        <input type="checkbox" class="field-consume" checked />
+                        consume
+                    </label>
                     <button class="field-delete-btn" style="padding: 4px 8px; background: #ffebee; color: #d32f2f; border: 1px solid #ffcdd2; border-radius: 4px; cursor: pointer;">✕</button>
                 </div>
                 <textarea class="field-doc" placeholder="説明 (改行可能)" rows="2" style="width: 100%; min-height: 0 !important; flex: none !important; resize: vertical; padding: 4px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 11px; font-family: sans-serif; line-height: 1.3;"></textarea>
@@ -1628,6 +1637,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
             const fieldSizeInput = row.querySelector<HTMLInputElement>('.field-size');
             const fieldRepeatInput = row.querySelector<HTMLInputElement>('.field-repeat');
             const fieldIfInput = row.querySelector<HTMLInputElement>('.field-if');
+            const fieldConsumeInput = row.querySelector<HTMLInputElement>('.field-consume');
             const fieldDocInput = row.querySelector<HTMLTextAreaElement>('.field-doc');
             
             if (!fieldIdInput || !fieldTypeInput) return;
@@ -1637,6 +1647,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
             const fieldSize = fieldSizeInput ? fieldSizeInput.value.trim() : '';
             const fieldRepeat = fieldRepeatInput ? fieldRepeatInput.value.trim() : '';
             const fieldIf = fieldIfInput ? fieldIfInput.value.trim() : '';
+            const fieldConsume = fieldConsumeInput ? fieldConsumeInput.checked : true;
             const fieldDoc = fieldDocInput ? fieldDocInput.value.trim() : '';
 
             if (!fieldId) {
@@ -1659,6 +1670,9 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
             
             if (fieldIf) {
                 yaml += `    if: ${fieldIf}\n`;
+            }
+            if (!fieldConsume) {
+                yaml += `    consume: false\n`;
             }
             
             if (fieldDoc) {

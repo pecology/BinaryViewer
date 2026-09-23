@@ -35,6 +35,8 @@ interface KsyFieldBase {
     doc?: string;
     /** 条件式（if） */
     if?: string;
+    /** 解析時にオフセットを進めるか（false の場合は peek/look-ahead） */
+    consume?: boolean;
 }
 
 /** 繰り返し設定（配列フィールド用） */

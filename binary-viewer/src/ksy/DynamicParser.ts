@@ -180,6 +180,7 @@ function convertToKsyField(obj: YamlValue): KsyField {
 
     // 条件式（if）
     const ifExpr = fieldObj['if'] !== undefined ? String(fieldObj['if']) : undefined;
+    const consume = fieldObj['consume'];
 
     let result: KsyField;
 
@@ -237,6 +238,9 @@ function convertToKsyField(obj: YamlValue): KsyField {
 
     if (ifExpr !== undefined) {
         (result as any).if = ifExpr;
+    }
+    if (consume !== undefined) {
+        (result as any).consume = Boolean(consume);
     }
 
     return result;
@@ -315,13 +319,13 @@ function parseField(context: ParseContext, field: KsyField & { if?: string }): B
         }
 
         context.values[field.id] = arrayValues;
-        return ranges;
+        return field.consume === false ? [] : ranges;
     }
 
     // 単一フィールド
     const [range, value] = parseSingleField(context, field, field.id);
     context.values[field.id] = value as number | string | Uint8Array;
-    return [range];
+    return field.consume === false ? [] : [range];
 }
 
 /**
@@ -335,12 +339,15 @@ function parseSingleField(
 ): [BinaryRange, unknown] {
     const startOffset = context.offset;
     const typeName = field.type;
+    const shouldConsume = field.consume !== false;
 
     // プリミティブ型チェック
     const primitiveInfo = parsePrimitiveType(typeName, context.defaultEndian);
     if (primitiveInfo) {
         const value = readPrimitive(context.dataView, context.offset, primitiveInfo);
-        context.offset += primitiveInfo.size;
+        if (shouldConsume) {
+            context.offset += primitiveInfo.size;
+        }
 
         const data = new Uint8Array(context.buffer, startOffset, primitiveInfo.size);
         const interpretType = createInterpretType(typeName, primitiveInfo.size, primitiveInfo.signed);
@@ -368,7 +375,9 @@ function parseSingleField(
             const value = Array.from(new Uint8Array(context.buffer, startOffset, size))
                 .map(b => b.toString(16).padStart(2, '0').toUpperCase())
                 .join('');
-            context.offset += size;
+            if (shouldConsume) {
+                context.offset += size;
+            }
             
             const data = new Uint8Array(context.buffer, startOffset, size);
             const interpretType = new HexEncoding();
@@ -381,7 +390,9 @@ function parseSingleField(
         if (field.type === 'strz') {
             const maxSize = field.size !== undefined ? resolveExpr(context, field.size) : undefined;
             const [value, bytesRead] = readStringZ(context.dataView, context.offset, maxSize, encoding);
-            context.offset += bytesRead;
+            if (shouldConsume) {
+                context.offset += bytesRead;
+            }
 
             const data = new Uint8Array(context.buffer, startOffset, bytesRead);
             const interpretType = createStringInterpretType(encoding);
@@ -394,7 +405,9 @@ function parseSingleField(
             }
             const size = resolveExpr(context, field.size);
             const value = readString(context.dataView, context.offset, size, encoding);
-            context.offset += size;
+            if (shouldConsume) {
+                context.offset += size;
+            }
 
             const data = new Uint8Array(context.buffer, startOffset, size);
             const interpretType = createStringInterpretType(encoding);
@@ -440,9 +453,6 @@ function parseSingleField(
     throw new Error(`Unknown type: ${typeName}`);
 }
 
-/**
- * ユーザー定義型をパース
- */
 function parseUserType(
     context: ParseContext,
     userType: KsyType,
@@ -503,15 +513,28 @@ function evaluateCondition(context: ParseContext, expr: string): boolean {
         .replace(/\band\b/g, '&&')
         .replace(/\bor\b/g, '||');
 
-    // 変数スコープを構築して評価
-    const keys = Object.keys(context.values);
-    const vals = Object.values(context.values);
+    // `if` や `in` などの予約語、またはハイフンを含むフィールド名は
+    // そのまま JavaScript の識別子にできないため、安全なエイリアスに置換する。
+    const aliases = Object.entries(context.values).map(([key, _value], index) => {
+        const safeBase = key.replace(/[^A-Za-z0-9_$]/g, '_') || `field_${index}`;
+        return [key, `__field_${safeBase}_${index}`] as const;
+    });
+
+    const aliasMap = Object.fromEntries(aliases);
+    const safeNames = Object.values(aliasMap);
+    const safeValues = Object.values(context.values);
+
+    for (const [key, alias] of aliases) {
+        const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(`(^|[^A-Za-z0-9_$])(${escaped})(?=$|[^A-Za-z0-9_$])`, 'g');
+        jsExpr = jsExpr.replace(pattern, (_match, prefix) => `${prefix}${alias}`);
+    }
 
     try {
-        const func = new Function(...keys, `return !!(${jsExpr});`);
-        return func(...vals);
+        const func = new Function(...safeNames, `return !!(${jsExpr});`);
+        return func(...safeValues);
     } catch (e) {
-        console.warn(`Failed to evaluate condition: ${expr}`, e);
+        console.warn(`Failed to evaluate condition: ${expr} -> ${jsExpr}`, e);
         return false;
     }
 }

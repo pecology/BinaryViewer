@@ -715,8 +715,8 @@ thead th {
   background: #fff;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  width: 95%;
-  max-width: 1200px;
+  width: min(96vw, 1500px);
+  max-width: none;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -759,9 +759,56 @@ thead th {
 /* KSYモーダルレイアウト */
 .ksy-modal-layout {
   display: grid;
-  grid-template-columns: 200px 1fr;
+  grid-template-columns: 180px minmax(0, 1fr);
   gap: 16px;
   min-height: 400px;
+}
+
+.gui-field-row {
+  min-width: 0;
+  width: 100%;
+}
+
+.gui-field-row > div {
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.gui-field-row .field-id,
+.gui-field-row .field-type,
+.gui-field-row .field-size,
+.gui-field-row .field-repeat,
+.gui-field-row .field-if,
+.gui-field-row .field-consume,
+.gui-field-row .field-delete-btn {
+  min-width: 0;
+}
+
+.gui-field-row .field-id {
+  flex: 1.2 1 110px !important;
+}
+
+.gui-field-row .field-type {
+  flex: 1.5 1 140px !important;
+}
+
+.gui-field-row .field-size,
+.gui-field-row .field-repeat,
+.gui-field-row .field-if {
+  flex: 0.8 1 80px !important;
+}
+
+.gui-field-row .field-consume {
+  flex: 0 0 auto !important;
+}
+
+.gui-field-row .field-delete-btn {
+  flex: 0 0 auto !important;
+}
+
+.gui-field-row .field-doc {
+  font-size: 11px;
 }
 
 .ksy-list-panel {
