@@ -83,6 +83,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <div class="ksy-list-panel">
             <h4>保存済みスキーマ</h4>
             <ul id="ksy-schema-list" class="ksy-schema-list"></ul>
+                        <button id="ksy-new-btn" class="ksy-new-btn" type="button">+ 新規作成</button>
           </div>
           <div class="ksy-edit-panel">
             <div class="ksy-edit-header">
@@ -217,6 +218,11 @@ updateParserSelect();
 
 // KSYモーダル関連
 const ksyModal = document.querySelector<HTMLDivElement>('#ksy-modal')!;
+const NEW_KSY_TEMPLATE = `meta:
+    id: new_format
+    endian: le
+seq:
+`;
 
 /** KSYスキーマ一覧を更新 */
 function updateKsySchemaList(): void {
@@ -287,7 +293,13 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// (新規作成ボタンは削除されました)
+document.querySelector<HTMLButtonElement>('#ksy-new-btn')!.addEventListener('click', () => {
+    document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = '';
+    document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = NEW_KSY_TEMPLATE;
+    document.querySelectorAll<HTMLLIElement>('.ksy-list-item').forEach(item => item.classList.remove('selected'));
+    document.querySelector<HTMLInputElement>('#ksy-save-name')!.focus();
+});
+
 // パーサー選択時に再パース
 document.querySelector<HTMLSelectElement>('#parser-select')!.addEventListener('change', (e) => {
     const select = e.target as HTMLSelectElement;
