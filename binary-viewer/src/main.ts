@@ -1325,12 +1325,12 @@ document.querySelector<HTMLTextAreaElement>('#hex-text-input')?.addEventListener
             return;
         }
 
-        // 空白文字（スペース、タブ、改行等）を削除
-        const cleanedText = text.replace(/\s+/g, '');
+        // 区切り文字（スペース、タブ、改行、ハイフン等）を削除
+        const cleanedText = text.replace(/[\s-]+/g, '');
 
         // 16進数として有効かチェック（0-9, a-f, A-F のみ、かつ偶数長）
         if (!/^[0-9A-Fa-f]+$/.test(cleanedText)) {
-            showError('無効な文字が含まれています。16進数（0-9, A-F）のみ入力してください');
+            showError('無効な文字が含まれています。16進数（0-9, A-F）と区切り文字（スペース/ハイフン）のみ入力してください');
             return;
         }
         if (cleanedText.length % 2 !== 0) {
