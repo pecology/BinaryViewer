@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [viteSingleFile()],
   build: {
     outDir: 'dist',
-    // 1ファイルに固めるためソースマップは無効化（軽量化のため）
-    sourcemap: false,
+    // ソースマップを単一HTMLに埋め込む
+    sourcemap: 'inline',
   },
 })
