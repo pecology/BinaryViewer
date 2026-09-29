@@ -123,6 +123,18 @@ export class HexEncoding implements BinaryInterpretType {
     }
 }
 
+export class BytesHexEncoding implements BinaryInterpretType {
+    toString(): string {
+        return "Hex";
+    }
+    interpret(bytes: Uint8Array): string {
+        const hex = Array.from(bytes)
+            .map(b => b.toString(16).padStart(2, '0').toUpperCase())
+            .join('');
+        return `0x${hex}`;
+    }
+}
+
 export class ZipDate implements BinaryInterpretType {
     toString(): string {
         return "ZipDate";

@@ -6,7 +6,7 @@
 import { BinaryRange } from '../BinaryRange';
 import { loadKsy } from '../ksyStorage';
 import type { BinaryInterpretType } from '../BinaryInterpretType';
-import { HexEncoding } from '../BinaryInterpretType';
+import { BytesHexEncoding, HexEncoding } from '../BinaryInterpretType';
 import type {
     KsySchema,
     KsyField,
@@ -109,9 +109,10 @@ function convertToKsySchema(obj: YamlObject): KsySchema {
     }
 
     const seq = obj['seq'];
-    if (!Array.isArray(seq)) {
+    if (seq !== null && !Array.isArray(seq)) {
         throw new Error('seq section is required and must be an array');
     }
+    const fields = seq ?? [];
 
     const schema: KsySchema = {
         meta: {
@@ -121,7 +122,7 @@ function convertToKsySchema(obj: YamlObject): KsySchema {
             fileExtension: meta['file-extension'] as string | string[] | undefined,
             category: typeof meta['category'] === 'string' ? meta['category'] : undefined,
         },
-        seq: seq.map(convertToKsyField),
+        seq: fields.map(convertToKsyField),
         doc: typeof obj['doc'] === 'string' ? obj['doc'] : undefined,
     };
 
@@ -441,7 +442,7 @@ function parseSingleField(
             context.offset += size;
         }
 
-        const range = new BinaryRange(value, displayName, new HexEncoding(), [], field.doc);
+        const range = new BinaryRange(value, displayName, new BytesHexEncoding(), [], field.doc);
         return [range, value];
     }
 

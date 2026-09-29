@@ -221,7 +221,7 @@ const ksyModal = document.querySelector<HTMLDivElement>('#ksy-modal')!;
 const NEW_KSY_TEMPLATE = `meta:
     id: new_format
     endian: le
-seq:
+seq: []
 `;
 
 /** KSYスキーマ一覧を更新 */
@@ -296,6 +296,11 @@ document.addEventListener('keydown', (e) => {
 document.querySelector<HTMLButtonElement>('#ksy-new-btn')!.addEventListener('click', () => {
     document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = '';
     document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = NEW_KSY_TEMPLATE;
+    const tabGui = document.querySelector<HTMLButtonElement>('#ksy-tab-gui');
+    if (tabGui && tabGui.classList.contains('active') && typeof (window as any).syncYamlToGui === 'function') {
+        (window as any).syncYamlToGui();
+        document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = '';
+    }
     document.querySelectorAll<HTMLLIElement>('.ksy-list-item').forEach(item => item.classList.remove('selected'));
     document.querySelector<HTMLInputElement>('#ksy-save-name')!.focus();
 });
