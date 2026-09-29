@@ -13,6 +13,43 @@ let currentFileName: string = '';
 let currentParseResult: BinaryRange | null = null;
 // 1ページ当たりの表示バイト数（16の倍数推奨）
 let bytesPerPage = 1024;
+let structureSearchMatches: HTMLDetailsElement[] = [];
+let activeStructureSearchIndex = -1;
+
+function selectStructureSearchResult(index: number): void {
+    if (structureSearchMatches.length === 0) return;
+
+    activeStructureSearchIndex = index % structureSearchMatches.length;
+    const selected = structureSearchMatches[activeStructureSearchIndex];
+    structureSearchMatches.forEach(item => item.classList.remove('search-selected'));
+    selected.classList.add('search-selected');
+
+    let ancestor: HTMLElement | null = selected;
+    while (ancestor) {
+        if (ancestor instanceof HTMLDetailsElement) {
+            ancestor.open = true;
+        }
+        ancestor = ancestor.parentElement;
+    }
+
+    selected.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function updateStructureSearch(): void {
+    const input = document.querySelector<HTMLInputElement>('#structure-search-input');
+    const query = input?.value.trim().toLocaleLowerCase() ?? '';
+    const details = [...document.querySelectorAll<HTMLDetailsElement>('.details-wrapper details')];
+
+    details.forEach(item => item.classList.remove('search-selected'));
+    structureSearchMatches = query
+        ? details.filter(item => decodeURIComponent(item.dataset.name ?? '').toLocaleLowerCase().includes(query))
+        : [];
+    activeStructureSearchIndex = -1;
+
+    if (structureSearchMatches.length > 0) {
+        selectStructureSearchResult(0);
+    }
+}
 
 function chunk<T>(source: Iterable<T>, chunkSize: number): T[][] {
     const result: T[][] = [];
@@ -66,7 +103,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div>
     </div>
     <div class="panel structure-panel">
-      <h3>構造 <span class="structure-controls"><button id="expand-all-btn" title="全て開く">▼ 全開</button><button id="collapse-all-btn" title="全て閉じる">▶ 全閉</button></span></h3>
+            <h3>構造 <span class="structure-controls"><input id="structure-search-input" type="search" placeholder="構造を検索" aria-label="構造を検索"><button id="expand-all-btn" title="全て開く">▼ 全開</button><button id="collapse-all-btn" title="全て閉じる">▶ 全閉</button></span></h3>
       <div class="details-wrapper"></div>
     </div>
   </div>
@@ -323,6 +360,18 @@ document.querySelector<HTMLSelectElement>('#parser-select')!.addEventListener('c
     // データがあれば再パース
     if (editableData) {
         parseAndDisplay();
+    }
+});
+
+const structureSearchInput = document.querySelector<HTMLInputElement>('#structure-search-input')!;
+structureSearchInput.addEventListener('input', updateStructureSearch);
+structureSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && structureSearchMatches.length > 0) {
+        e.preventDefault();
+        selectStructureSearchResult(activeStructureSearchIndex + 1);
+        structureSearchMatches[activeStructureSearchIndex]
+            .querySelector<HTMLElement>(':scope > summary .cancel-toggle')
+            ?.click();
     }
 });
 
@@ -862,6 +911,7 @@ function displayParseResult(parseResult: BinaryRange): void {
     document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(parseResult);
 
     document.querySelector<HTMLDivElement>('.details-wrapper')!.innerHTML = toStructureHtmlString(parseResult);
+    updateStructureSearch();
 
     document.querySelector<HTMLElement>('#paging-index-input')!.addEventListener('input', (e) => {
         const pagingIndex = parseInt((e.target as HTMLInputElement).value);
@@ -1295,7 +1345,7 @@ const toHexTableHtmlString = (hexRange: BinaryRange, pageIndex: number = 0): str
 const toStructureHtmlString = (segment: BinaryRange): string => {
     const titleAttr = segment.doc ? ` title="${escapeHtml(segment.doc)}"` : '';
     return `
-<details data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0"${titleAttr}>
+<details data-name="${encodeURIComponent(segment.name)}" data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0"${titleAttr}>
   <summary><span class="cancel-toggle"> ${escapeHtml(segment.name)} (${rangeToString(segment)})</span></summary>
     ${escapeHtml(segment.interpret())}
     ${segment.subRanges.reduce((acc, child) => acc + toStructureHtmlString(child), "")}
