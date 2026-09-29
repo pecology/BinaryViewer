@@ -369,7 +369,7 @@ function parseSingleField(
         }
 
         const data = new Uint8Array(context.buffer, startOffset, primitiveInfo.size);
-        const interpretType = createInterpretType(typeName, primitiveInfo.size, primitiveInfo.signed);
+        const interpretType = createInterpretType(typeName, primitiveInfo.size, primitiveInfo.signed, primitiveInfo.endian);
         const range = new BinaryRange(data, displayName, interpretType, [], field.doc);
         
         // contents検証（型ガードを使用）
@@ -583,7 +583,7 @@ function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
 /**
  * プリミティブ型のInterpretTypeを作成
  */
-function createInterpretType(typeName: string, size: number, signed: boolean): BinaryInterpretType {
+function createInterpretType(typeName: string, size: number, signed: boolean, endian?: Endian): BinaryInterpretType {
     // 型名から表示用の名前を生成
     const displayName = typeName.toUpperCase();
     
@@ -591,8 +591,7 @@ function createInterpretType(typeName: string, size: number, signed: boolean): B
         toString: () => displayName,
         interpret: (bytes: Uint8Array) => {
             const dataView = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
-            const littleEndian = typeName.endsWith('le') || 
-                (!typeName.endsWith('be') && size <= 1);
+            const littleEndian = endian === 'le' || size <= 1;
             
             let value: number;
             if (signed) {
