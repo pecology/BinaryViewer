@@ -302,8 +302,13 @@ export function parseBinary(data: ArrayBuffer, schema: KsySchema): ParseResult {
         }
     }
 
-    // ルートノードを作成（全体を包含するデータ）
-    const rootData = new Uint8Array(data, 0, context.offset);
+    if (context.offset < data.byteLength) {
+        const remainingData = new Uint8Array(data, context.offset);
+        rootRanges.push(new BinaryRange(remainingData, '未解析データ', new BytesHexEncoding()));
+    }
+
+    // ルートノードは入力全体を包含する
+    const rootData = new Uint8Array(data);
     const root = new BinaryRange(rootData, schema.meta.id, null, rootRanges, schema.doc);
 
     return {
