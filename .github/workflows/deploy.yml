@@ -40,6 +40,10 @@ jobs:
         working-directory: binary-viewer
         run: npm run build
 
+      - name: Create downloadable single HTML
+        working-directory: binary-viewer
+        run: cp dist/index.html dist/BinaryViewer.html
+
       - name: Upload Single HTML Artifact
         uses: actions/upload-artifact@v4
         with:

@@ -71,6 +71,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="three-column-layout">
     <div class="panel input-panel">
       <h3>入力</h3>
+        ${import.meta.env.PROD ? '<a class="standalone-download" href="./BinaryViewer.html" download="BinaryViewer.html">単一HTMLをダウンロード</a>' : ''}
       <div id="drop-zone" class="drop-zone" tabindex="0">
           <span class="drop-zone-text">ファイルをドラッグ＆ドロップ<br/>またはクリックで選択<br/>または Ctrl+V</span>
           <input type="file" id="fileInput" />
