@@ -9,12 +9,32 @@ import type { BinaryRange } from './BinaryRange.ts'
 // パース時は editableData.buffer でArrayBufferとして渡す
 let editableData: Uint8Array | null = null;
 let currentFileName: string = '';
+let sourceFile: File | null = null;
+let sourceText: string | null = null;
+let dumpLogMode = false;
+let dumpLogRecords: DumpLogRecord[] = [];
+let selectedDumpLogRecord = -1;
+let dumpLogFilter = '';
+let dumpLogFilteredIndicesCache: number[] | null = null;
+const dumpLogRowHeight = 52;
+const dumpLogOverscan = 8;
+let dumpLogVirtualSpacer: HTMLDivElement | null = null;
+let dumpLogVirtualRows: HTMLDivElement | null = null;
 // 現在のパース結果（イベントリスナーから参照）
 let currentParseResult: BinaryRange | null = null;
 // 1ページ当たりの表示バイト数（16の倍数推奨）
 let bytesPerPage = 1024;
 let structureSearchMatches: HTMLDetailsElement[] = [];
 let activeStructureSearchIndex = -1;
+
+interface DumpLogRecord {
+    timestamp: string | null;
+    message: string | null;
+    lineNumber: number;
+    data: Uint8Array | null;
+    result?: BinaryRange;
+    error?: string;
+}
 
 function selectStructureSearchResult(index: number): void {
     if (structureSearchMatches.length === 0) return;
@@ -79,6 +99,14 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div class="text-input-section" style="margin: 0 10px 10px; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 4px;">
           <textarea id="hex-text-input" placeholder="Hexテキスト入力 (例: 01 02 0A... 入力すると自動パースされます)" style="width: 100%; height: 60px; resize: vertical; margin-bottom: 0px; box-sizing: border-box; font-family: monospace;"></textarea>
       </div>
+      <div class="dump-log-options">
+          <label class="dump-log-toggle"><input id="dump-log-mode" type="checkbox"> ダンプログとして解析</label>
+          <div id="dump-log-settings" hidden>
+              <label for="dump-log-date-format">日時形式</label>
+              <input id="dump-log-date-format" type="text" value="yyyy/M/d HH:mm:ss" spellcheck="false">
+              <small>例: yyyy-MM-dd HH:mm:ss.SSS</small>
+          </div>
+      </div>
       <div id="current-file-name" class="current-file-name"></div>
       <div class="parser-section">
           <label>パーサー:</label>
@@ -95,6 +123,14 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div>
       <div id="error-message" class="error-message"></div>
     </div>
+        <div id="dump-log-panel" class="panel dump-log-panel" hidden>
+            <h3>ダンプレコード</h3>
+            <div class="dump-log-list-tools">
+                    <div id="dump-log-summary" aria-live="polite"></div>
+                    <input id="dump-log-filter" type="search" placeholder="日時・行番号・状態を検索" aria-label="ダンプレコードを検索">
+            </div>
+            <div id="dump-log-records" aria-label="ダンプレコード一覧"></div>
+        </div>
     <div class="panel hex-panel">
       <h3>Hex <span id="edit-hint" class="edit-hint">(ダブルクリックで編集)</span></h3>
       <div id="hex-table-control"></div>
@@ -398,6 +434,65 @@ document.querySelector<HTMLInputElement>('#fileInput')!.addEventListener('change
     }
 });
 
+const dumpLogModeInput = document.querySelector<HTMLInputElement>('#dump-log-mode')!;
+const dumpLogSettings = document.querySelector<HTMLDivElement>('#dump-log-settings')!;
+const dumpLogPanel = document.querySelector<HTMLDivElement>('#dump-log-panel')!;
+const dumpLogLayout = document.querySelector<HTMLDivElement>('.three-column-layout')!;
+const dumpLogDateFormat = document.querySelector<HTMLInputElement>('#dump-log-date-format')!;
+const dumpLogRecordsElement = document.querySelector<HTMLDivElement>('#dump-log-records')!;
+const dumpLogFilterInput = document.querySelector<HTMLInputElement>('#dump-log-filter')!;
+const hexTextInput = document.querySelector<HTMLTextAreaElement>('#hex-text-input')!;
+
+dumpLogModeInput.addEventListener('change', async () => {
+    dumpLogMode = dumpLogModeInput.checked;
+    dumpLogSettings.hidden = !dumpLogMode;
+    dumpLogPanel.hidden = !dumpLogMode;
+    dumpLogLayout.classList.toggle('dump-log-layout', dumpLogMode);
+    hexTextInput.placeholder = dumpLogMode
+        ? 'ダンプログを貼り付け (日時行と16進数ダンプ行)'
+        : 'Hexテキスト入力 (例: 01 02 0A... 入力すると自動パースされます)';
+    hexTextInput.style.height = dumpLogMode ? '180px' : '60px';
+
+    if (sourceFile) {
+        await loadFile(sourceFile);
+    } else {
+        hexTextInput.dispatchEvent(new Event('input'));
+    }
+});
+
+dumpLogDateFormat.addEventListener('change', () => {
+    if (dumpLogMode && sourceText !== null) {
+        processDumpLog(sourceText);
+    }
+});
+
+dumpLogRecordsElement.addEventListener('click', (event) => {
+    const target = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-record-index]');
+    if (target) {
+        selectDumpLogRecord(Number(target.dataset.recordIndex));
+    }
+});
+dumpLogRecordsElement.addEventListener('scroll', renderDumpLogRecords);
+
+dumpLogFilterInput.addEventListener('input', () => {
+    dumpLogFilter = dumpLogFilterInput.value.trim().toLocaleLowerCase();
+    dumpLogFilteredIndicesCache = null;
+    dumpLogRecordsElement.scrollTop = 0;
+    const filteredIndices = getFilteredDumpLogIndices();
+    if (filteredIndices.length === 0) {
+        selectedDumpLogRecord = -1;
+        editableData = null;
+        document.querySelector<HTMLSpanElement>('#current-file-name')!.textContent = `📄 ${currentFileName}`;
+        clearError();
+        clearDisplayedParseResult();
+        renderDumpLogRecords();
+    } else if (!filteredIndices.includes(selectedDumpLogRecord)) {
+        selectDumpLogRecord(filteredIndices[0]);
+    } else {
+        renderDumpLogRecords();
+    }
+});
+
 // ドロップゾーンのクリックでファイル選択
 document.querySelector<HTMLDivElement>('#drop-zone')!.addEventListener('click', () => {
     document.querySelector<HTMLInputElement>('#fileInput')!.click();
@@ -493,9 +588,25 @@ function updateExtMappingInfo(): void {
 // ファイルを読み込む共通関数
 async function loadFile(file: File): Promise<void> {
     clearError();
+    if (textParseTimeout) {
+        clearTimeout(textParseTimeout);
+        textParseTimeout = null;
+    }
     try {
-        const arrayBuffer = await file.arrayBuffer();
+        sourceFile = file;
         currentFileName = file.name;
+        if (dumpLogMode) {
+            sourceText = await file.text();
+            editableData = null;
+            document.querySelector<HTMLSpanElement>('#current-file-name')!.textContent = `📄 ${file.name}`;
+            document.querySelector<HTMLButtonElement>('#download-btn')!.disabled = true;
+            updateExtMappingInfo();
+            processDumpLog(sourceText);
+            return;
+        }
+
+        sourceText = null;
+        const arrayBuffer = await file.arrayBuffer();
         // 編集可能なUint8Arrayを作成
         editableData = new Uint8Array(arrayBuffer);
         
@@ -795,48 +906,317 @@ function clearError(): void {
 
 // パースして表示する関数
 async function parseAndDisplay(): Promise<void> {
-    const parserSelect = document.querySelector<HTMLSelectElement>('#parser-select')!;
     clearError();
+
+    if (dumpLogMode) {
+        if (sourceText !== null) {
+            processDumpLog(sourceText);
+        }
+        return;
+    }
     
     if (!editableData) {
         return;
     }
     
-    const parserType = parserSelect.value;
+    const parserType = getCurrentParserValue();
     
-    let parseResult: BinaryRange;
     try {
-        // 組み込みパーサーをチェック
-        const builtinParser = getBuiltinParser(parserType);
-        if (builtinParser) {
-            parseResult = builtinParser.parse(editableData);
-        } else if (parserType.startsWith('ksy:')) {
-            // 保存済みKSYスキーマを使用
-            const ksyName = parserType.substring(4);
-            const ksyContent = loadKsy(ksyName);
-            if (!ksyContent) {
-                showError(`KSYスキーマ "${ksyName}" が見つかりません`);
-                return;
-            }
-            const schema = parseKsySchema(ksyContent);
-            const result = parseBinary(editableData.buffer as ArrayBuffer, schema);
-            if (result.warnings.length > 0) {
-                console.warn('Parse warnings:', result.warnings);
-            }
-            parseResult = result.root;
-        } else {
-            showError('不明なパーサータイプ');
-            return;
-        }
+        const parseResult = parseData(editableData, parserType);
+        currentParseResult = parseResult;
+        displayParseResult(parseResult);
     } catch (e) {
         showError(`パースエラー: ${e instanceof Error ? e.message : String(e)}`);
+    }
+}
+
+function parseData(data: Uint8Array, parserType: ParserType): BinaryRange {
+    const builtinParser = getBuiltinParser(parserType);
+    if (builtinParser) {
+        return builtinParser.parse(data);
+    }
+
+    if (parserType.startsWith('ksy:')) {
+        const ksyName = parserType.substring(4);
+        const ksyContent = loadKsy(ksyName);
+        if (!ksyContent) {
+            throw new Error(`KSYスキーマ "${ksyName}" が見つかりません`);
+        }
+        const schema = parseKsySchema(ksyContent);
+        const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+        const result = parseBinary(buffer, schema);
+        if (result.warnings.length > 0) {
+            console.warn('Parse warnings:', result.warnings);
+        }
+        return result.root;
+    }
+
+    throw new Error('不明なパーサータイプ');
+}
+
+const dateFormatTokens = ['yyyy', 'SSS', 'MM', 'dd', 'HH', 'mm', 'ss', 'M', 'd'] as const;
+
+function createDateMatcher(format: string): RegExp {
+    if (!format.trim()) {
+        throw new Error('日時形式を入力してください');
+    }
+
+    let source = '';
+    let index = 0;
+    while (index < format.length) {
+        const token = dateFormatTokens.find(candidate => format.startsWith(candidate, index));
+        if (token) {
+            const pattern = token === 'yyyy' ? '\\d{4}'
+                : token === 'SSS' ? '\\d{1,3}'
+                : token.length === 2 ? '\\d{2}'
+                : '\\d{1,2}';
+            source += `(${pattern})`;
+            index += token.length;
+        } else {
+            source += format[index].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            index++;
+        }
+    }
+    return new RegExp(source);
+}
+
+function isValidDateMatch(match: RegExpExecArray, format: string): boolean {
+    const values: Record<string, number> = {};
+    let captureIndex = 1;
+    for (let index = 0; index < format.length;) {
+        const token = dateFormatTokens.find(candidate => format.startsWith(candidate, index));
+        if (token) {
+            const value = Number(match[captureIndex++]);
+            const key = token === 'yyyy' ? 'year'
+                : token === 'M' || token === 'MM' ? 'month'
+                : token === 'd' || token === 'dd' ? 'day'
+                : token === 'HH' ? 'hour'
+                : token === 'mm' ? 'minute'
+                : token === 'ss' ? 'second'
+                : 'millisecond';
+            values[key] = value;
+            index += token.length;
+        } else {
+            index++;
+        }
+    }
+
+    if (values.month !== undefined && (values.month < 1 || values.month > 12)) return false;
+    if (values.day !== undefined && (values.day < 1 || values.day > 31)) return false;
+    if (values.year !== undefined && values.month !== undefined && values.day !== undefined) {
+        const daysInMonth = new Date(Date.UTC(values.year, values.month, 0)).getUTCDate();
+        if (values.day > daysInMonth) return false;
+    }
+    if (values.hour !== undefined && values.hour > 23) return false;
+    if (values.minute !== undefined && values.minute > 59) return false;
+    if (values.second !== undefined && values.second > 59) return false;
+    return true;
+}
+
+function processDumpLog(text: string): void {
+    sourceText = text;
+    currentFileName = sourceFile?.name ?? '[Text Input]';
+    document.querySelector<HTMLSpanElement>('#current-file-name')!.textContent = `📄 ${currentFileName}`;
+    editableData = null;
+    document.querySelector<HTMLButtonElement>('#download-btn')!.disabled = true;
+    clearError();
+    dumpLogRecords = [];
+    selectedDumpLogRecord = -1;
+    dumpLogFilteredIndicesCache = null;
+    dumpLogRecordsElement.scrollTop = 0;
+
+    let dateMatcher: RegExp;
+    try {
+        dateMatcher = createDateMatcher(dumpLogDateFormat.value);
+    } catch (error) {
+        showError(error instanceof Error ? error.message : String(error));
+        renderDumpLogRecords();
+        updateDumpLogSummary();
+        clearDisplayedParseResult();
         return;
     }
-    
-    // グローバル変数を更新（イベントリスナーから参照）
-    currentParseResult = parseResult;
-    
-    displayParseResult(parseResult);
+
+    let currentTimestamp: string | null = null;
+    let currentMessage: string | null = null;
+    const lines = text.split(/\r?\n/);
+    lines.forEach((line, lineIndex) => {
+        const trimmed = line.trim();
+        if (!trimmed || /^(?:\.{3,}|…+)$/.test(trimmed)) return;
+
+        const dateMatch = dateMatcher.exec(line);
+        if (dateMatch && isValidDateMatch(dateMatch, dumpLogDateFormat.value)) {
+            currentTimestamp = dateMatch[0];
+            currentMessage = line.slice(dateMatch.index + dateMatch[0].length).trim() || null;
+            return;
+        }
+
+        const tokens = trimmed.split(/[\s-]+/).filter(Boolean);
+        const hasHexToken = tokens.some(token => /^[0-9a-f]+$/i.test(token));
+        if (!hasHexToken) return;
+
+        if (!tokens.every(token => /^(?:[0-9a-f]{2})+$/i.test(token))) {
+            dumpLogRecords.push({
+                timestamp: currentTimestamp,
+                message: currentMessage,
+                lineNumber: lineIndex + 1,
+                data: null,
+                error: '16進数バイト列として読めないトークンがあります',
+            });
+            return;
+        }
+
+        const bytes: number[] = [];
+        for (const token of tokens) {
+            for (let index = 0; index < token.length; index += 2) {
+                bytes.push(parseInt(token.slice(index, index + 2), 16));
+            }
+        }
+
+        dumpLogRecords.push({
+            timestamp: currentTimestamp,
+            message: currentMessage,
+            lineNumber: lineIndex + 1,
+            data: Uint8Array.from(bytes),
+        });
+    });
+
+    const parserType = getCurrentParserValue();
+    for (const record of dumpLogRecords) {
+        if (!record.data) continue;
+        try {
+            record.result = parseData(record.data, parserType);
+        } catch (error) {
+            record.error = error instanceof Error ? error.message : String(error);
+        }
+    }
+
+    renderDumpLogRecords();
+    updateDumpLogSummary();
+
+    if (dumpLogRecords.length > 0) {
+        selectDumpLogRecord(0);
+    } else {
+        clearDisplayedParseResult();
+        if (text.trim()) {
+            showError('日時行の後に16進数ダンプ行が見つかりません');
+        }
+    }
+}
+
+function renderDumpLogRecords(): void {
+    const filteredIndices = getFilteredDumpLogIndices();
+    const scrollTop = dumpLogRecordsElement.scrollTop;
+    const firstVisible = Math.floor(scrollTop / dumpLogRowHeight);
+    const startIndex = Math.max(0, firstVisible - dumpLogOverscan);
+    const endIndex = Math.min(
+        filteredIndices.length,
+        Math.ceil((scrollTop + dumpLogRecordsElement.clientHeight) / dumpLogRowHeight) + dumpLogOverscan,
+    );
+
+    if (filteredIndices.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'dump-log-empty';
+        empty.textContent = dumpLogFilter ? '一致するレコードがありません' : 'レコードがありません';
+        dumpLogRecordsElement.replaceChildren(empty);
+        dumpLogVirtualSpacer = null;
+        dumpLogVirtualRows = null;
+        return;
+    }
+
+    if (!dumpLogVirtualSpacer?.isConnected || !dumpLogVirtualRows?.isConnected) {
+        dumpLogVirtualSpacer = document.createElement('div');
+        dumpLogVirtualSpacer.className = 'dump-log-virtual-spacer';
+        dumpLogVirtualRows = document.createElement('div');
+        dumpLogVirtualRows.className = 'dump-log-virtual-rows';
+        dumpLogVirtualSpacer.append(dumpLogVirtualRows);
+        dumpLogRecordsElement.replaceChildren(dumpLogVirtualSpacer);
+    }
+    dumpLogVirtualSpacer.style.height = `${filteredIndices.length * dumpLogRowHeight}px`;
+    dumpLogVirtualRows.style.top = `${startIndex * dumpLogRowHeight}px`;
+    const visibleRowElements: HTMLButtonElement[] = [];
+
+    filteredIndices.slice(startIndex, endIndex).forEach(index => {
+        const record = dumpLogRecords[index];
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.recordIndex = String(index);
+        button.className = `dump-log-record${index === selectedDumpLogRecord ? ' selected' : ''}`;
+        const heading = document.createElement('span');
+        heading.className = 'dump-log-record-heading';
+        const timestamp = document.createElement('span');
+        timestamp.className = 'dump-log-record-time';
+        timestamp.textContent = record.timestamp ?? '日時なし';
+        const message = document.createElement('span');
+        message.className = 'dump-log-record-message';
+        message.textContent = record.message ?? '';
+        heading.append(timestamp, message);
+        const meta = document.createElement('span');
+        meta.className = 'dump-log-record-meta';
+        meta.textContent = `行 ${record.lineNumber} · ${record.data?.length ?? 0} B`;
+        const status = document.createElement('span');
+        status.className = `dump-log-record-status${record.error ? ' error' : ''}`;
+        status.textContent = record.error ? 'エラー' : '成功';
+        button.append(heading, meta, status);
+        button.title = [record.timestamp, record.message, record.error ?? `ログ ${record.lineNumber} 行目`]
+            .filter(Boolean)
+            .join(' · ');
+        visibleRowElements.push(button);
+    });
+
+    dumpLogVirtualRows.replaceChildren(...visibleRowElements);
+}
+
+function getFilteredDumpLogIndices(): number[] {
+    if (dumpLogFilteredIndicesCache === null) {
+        dumpLogFilteredIndicesCache = dumpLogRecords.flatMap((record, index) => {
+            if (!dumpLogFilter) return [index];
+            const searchableText = [
+                record.timestamp ?? '日時なし',
+                record.message ?? '',
+                `行 ${record.lineNumber}`,
+                `${record.data?.length ?? 0} B`,
+                record.error ? 'エラー' : '成功',
+                record.error ?? '',
+            ].join(' ').toLocaleLowerCase();
+            return searchableText.includes(dumpLogFilter) ? [index] : [];
+        });
+    }
+    return dumpLogFilteredIndicesCache;
+}
+
+function updateDumpLogSummary(): void {
+    const successCount = dumpLogRecords.filter(record => record.result).length;
+    const errorCount = dumpLogRecords.filter(record => record.error).length;
+    document.querySelector<HTMLDivElement>('#dump-log-summary')!.textContent =
+        `${dumpLogRecords.length} レコード / 成功 ${successCount} / エラー ${errorCount}`;
+}
+
+function selectDumpLogRecord(index: number): void {
+    const record = dumpLogRecords[index];
+    if (!record) return;
+
+    selectedDumpLogRecord = index;
+    renderDumpLogRecords();
+    editableData = record.data;
+    document.querySelector<HTMLButtonElement>('#download-btn')!.disabled = true;
+    document.querySelector<HTMLSpanElement>('#current-file-name')!.textContent =
+        `${currentFileName || '[Text Input]'} · ${record.timestamp ?? '日時なし'} · 行 ${record.lineNumber}`;
+
+    if (record.result) {
+        currentParseResult = record.result;
+        clearError();
+        displayParseResult(record.result);
+    } else {
+        clearDisplayedParseResult();
+        showError(`ログ ${record.lineNumber} 行目: ${record.error ?? '解析できません'}`);
+    }
+}
+
+function clearDisplayedParseResult(): void {
+    currentParseResult = null;
+    document.querySelector<HTMLDivElement>('#hex-table-control')!.replaceChildren();
+    document.querySelector<HTMLDivElement>('#hex-table')!.replaceChildren();
+    document.querySelector<HTMLDivElement>('.details-wrapper')!.replaceChildren();
 }
 
 // アコーディオン（details）の開閉状態を保存
@@ -869,6 +1249,30 @@ function restoreAccordionState(openOffsets: Set<string>): void {
 // 編集後の再パース（アコーディオン状態を保持）
 async function reparseAfterEdit(): Promise<void> {
     if (!editableData) return;
+
+    if (dumpLogMode) {
+        const record = dumpLogRecords[selectedDumpLogRecord];
+        if (!record) return;
+        record.data = new Uint8Array(editableData);
+        record.error = undefined;
+        try {
+            record.result = parseData(record.data, getCurrentParserValue());
+        } catch (error) {
+            record.result = undefined;
+            record.error = error instanceof Error ? error.message : String(error);
+        }
+        dumpLogFilteredIndicesCache = null;
+        renderDumpLogRecords();
+        updateDumpLogSummary();
+        if (record.result) {
+            currentParseResult = record.result;
+            displayParseResult(record.result);
+        } else {
+            clearDisplayedParseResult();
+            showError(`ログ ${record.lineNumber} 行目: ${record.error}`);
+        }
+        return;
+    }
     
     // アコーディオン状態を保存
     const accordionState = saveAccordionState();
@@ -1371,13 +1775,24 @@ let textParseTimeout: number | null = null;
 document.querySelector<HTMLTextAreaElement>('#hex-text-input')?.addEventListener('input', async (e) => {
     const textarea = e.target as HTMLTextAreaElement;
     const text = textarea.value;
+    sourceFile = null;
+    sourceText = text;
     
     if (textParseTimeout) clearTimeout(textParseTimeout);
     
     // 連続入力を防ぐため、300msデバウンスしてパース実行
     textParseTimeout = window.setTimeout(async () => {
         if (!text.trim()) {
-            clearError();
+            if (dumpLogMode) {
+                processDumpLog(text);
+            } else {
+                clearError();
+            }
+            return;
+        }
+
+        if (dumpLogMode) {
+            processDumpLog(text);
             return;
         }
 

@@ -46,6 +46,10 @@ h1 {
   gap: 0;
 }
 
+.three-column-layout.dump-log-layout {
+  grid-template-columns: 280px minmax(210px, 0.75fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
 .panel {
   display: flex;
   flex-direction: column;
@@ -104,6 +108,218 @@ h1 {
 .input-panel .current-file-name {
   padding: 0 15px 10px;
   font-size: 13px;
+}
+
+.dump-log-options {
+  padding: 10px 15px;
+  border-top: 1px solid #ddd;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+}
+
+.dump-log-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #333;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#dump-log-settings {
+  margin-top: 10px;
+}
+
+#dump-log-settings[hidden] {
+  display: none;
+}
+
+#dump-log-settings > label {
+  display: block;
+  margin-bottom: 4px;
+  color: #666;
+  font-size: 11px;
+}
+
+#dump-log-date-format {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 7px;
+  border: 1px solid #bbb;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+#dump-log-settings small {
+  display: block;
+  margin-top: 4px;
+  color: #777;
+  font-size: 10px;
+}
+
+.dump-log-panel[hidden] {
+  display: none;
+}
+
+.dump-log-panel {
+  min-width: 0;
+  background: #fff;
+}
+
+.dump-log-list-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+#dump-log-summary {
+  color: #555;
+  font-size: 11px;
+}
+
+#dump-log-filter {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+#dump-log-records {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  contain: strict;
+}
+
+.dump-log-virtual-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.dump-log-virtual-rows {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.dump-log-record {
+  width: 100%;
+  height: 52px;
+  min-height: 52px;
+  max-height: 52px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 7px 10px;
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid #eee;
+  background: #fff;
+  color: #444;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dump-log-record-heading {
+  display: flex;
+  grid-column: 1;
+  grid-row: 1;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dump-log-record:hover {
+  background: #f5f8f5;
+}
+
+.dump-log-record.selected {
+  box-shadow: inset 3px 0 #4d7655;
+  background: #eaf2eb;
+  color: #294c30;
+}
+
+.dump-log-record-time {
+  flex: 0 0 auto;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dump-log-record-message {
+  min-width: 0;
+  overflow: hidden;
+  color: #666;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dump-log-record-meta {
+  grid-column: 1;
+  grid-row: 2;
+  color: #777;
+  font-size: 10px;
+}
+
+.dump-log-record-status {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: #347344;
+  font-size: 10px;
+}
+
+.dump-log-record-status.error {
+  color: #b42318;
+}
+
+.dump-log-empty {
+  padding: 18px 10px;
+  color: #777;
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .three-column-layout.dump-log-layout {
+    grid-template-columns: minmax(180px, 40%) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .three-column-layout.dump-log-layout .input-panel {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .three-column-layout.dump-log-layout .dump-log-panel {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .three-column-layout.dump-log-layout .hex-panel {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .three-column-layout.dump-log-layout .structure-panel {
+    grid-column: 2;
+    grid-row: 2;
+  }
 }
 
 /* ダウンロードセクション */
