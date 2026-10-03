@@ -103,8 +103,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <label class="dump-log-toggle"><input id="dump-log-mode" type="checkbox"> ダンプログとして解析</label>
           <div id="dump-log-settings" hidden>
               <label for="dump-log-date-format">日時形式</label>
-              <input id="dump-log-date-format" type="text" value="yyyy/M/d HH:mm:ss" spellcheck="false">
-              <small>例: yyyy-MM-dd HH:mm:ss.SSS</small>
+              <input id="dump-log-date-format" type="text" value="[yyyy/M/d HH:mm:ss.fff]" spellcheck="false">
+              <small>例: [yyyy/M/d HH:mm:ss.fff]（角括弧・ミリ秒は省略可能）</small>
           </div>
       </div>
       <div id="current-file-name" class="current-file-name"></div>
@@ -973,7 +973,7 @@ function parseData(data: Uint8Array, parserType: ParserType): BinaryRange {
     throw new Error('不明なパーサータイプ');
 }
 
-const dateFormatTokens = ['yyyy', 'SSS', 'MM', 'dd', 'HH', 'mm', 'ss', 'M', 'd'] as const;
+const dateFormatTokens = ['yyyy', 'SSS', 'fff', 'MM', 'dd', 'HH', 'mm', 'ss', 'M', 'd'] as const;
 
 function createDateMatcher(format: string): RegExp {
     if (!format.trim()) {
@@ -986,7 +986,7 @@ function createDateMatcher(format: string): RegExp {
         const token = dateFormatTokens.find(candidate => format.startsWith(candidate, index));
         if (token) {
             const pattern = token === 'yyyy' ? '\\d{4}'
-                : token === 'SSS' ? '\\d{1,3}'
+                : token === 'SSS' || token === 'fff' ? '\\d{1,3}'
                 : token.length === 2 ? '\\d{2}'
                 : '\\d{1,2}';
             source += `(${pattern})`;
@@ -996,7 +996,14 @@ function createDateMatcher(format: string): RegExp {
             index++;
         }
     }
-    return new RegExp(source);
+    const hasMilliseconds = format.includes('SSS') || format.includes('fff');
+    const hasSeconds = format.includes('ss');
+    if (hasSeconds && !hasMilliseconds) {
+        source += '(?:\\.(\\d{1,3}))?';
+    }
+
+    const hasBrackets = format.startsWith('[') && format.endsWith(']');
+    return new RegExp(hasBrackets ? source : `\\[?${source}\\]?`);
 }
 
 function isValidDateMatch(match: RegExpExecArray, format: string): boolean {
