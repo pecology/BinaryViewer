@@ -23,6 +23,7 @@ import {
     getRepeatExpr,
 } from './KsySchema';
 import { parseYaml } from './YamlParser';
+import { isCsvSchemaText, csvToSchemaObject } from './CsvSchema';
 import type { YamlObject, YamlValue } from './YamlParser';
 import {
     readPrimitive,
@@ -73,12 +74,16 @@ interface ParseContext {
 }
 
 /**
- * テキスト（YAMLまたはJSON）からKsyスキーマをパース
+ * テキスト（YAML・JSON・CSV）からKsyスキーマをパース
  * JSONの場合は先にパースを試み、失敗したらYAMLとしてパース
  */
 export function parseKsySchema(text: string): KsySchema {
     const trimmed = text.trim();
-    
+
+    if (isCsvSchemaText(trimmed)) {
+        return convertToKsySchema(csvToSchemaObject(trimmed));
+    }
+
     // JSONかどうかを判定（{で始まる場合）
     if (trimmed.startsWith('{')) {
         try {

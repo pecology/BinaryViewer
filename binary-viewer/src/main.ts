@@ -1,5 +1,6 @@
 import './style.css'
 import { parseKsySchema, parseBinary } from './ksy/DynamicParser.ts'
+import { convertSchemaTextToCsv, convertSchemaTextToYaml } from './ksy/CsvSchema.ts'
 import { saveKsy, loadKsy, deleteKsy, listKsyNames, hasKsy, exportAllKsy, importKsy } from './ksyStorage.ts'
 import { saveExtensionMapping, getParserForExtension, getExtensionFromFileName, getAllExtensionMappings, removeExtensionMapping, type ParserType } from './extensionMapping.ts'
 import { getBuiltinParsers, getBuiltinParser } from './parserRegistry.ts'
@@ -176,8 +177,10 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
             <div id="ksy-raw-editor" style="display: flex; flex-direction: column; flex: 1;">
               <div class="ksy-file-row">
                 <label>ファイルから読み込み:</label>
-                <input type="file" id="ksyFileInput" accept=".ksy,.yaml,.yml" />
-              </div>
+                <input type="file" id="ksyFileInput"                 accept=".ksy,.yaml,.yml,.csv" />
+                                <button id="ksy-to-csv-btn" type="button" title="エディタの内容をCSV形式に変換">→ CSV</button>
+                                <button id="ksy-to-yaml-btn" type="button" title="エディタの内容をYAML形式に変換">→ YAML</button>
+                              </div>
               <textarea id="ksyText" placeholder="meta:\n  id: my_format\n  endian: le\nseq:\n  - id: magic\n    type: u4"></textarea>
             </div>
             
@@ -725,10 +728,26 @@ document.querySelector<HTMLInputElement>('#ksyFileInput')!.addEventListener('cha
         const text = await input.files[0].text();
         document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = text;
         // ファイル名からスキーマ名を設定
-        const fileName = input.files[0].name.replace(/\.(ksy|yaml|yml)$/i, '');
+        const fileName = input.files[0].name.        replace(/\.(ksy|yaml|yml|csv)$/i, '');
         document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = fileName;
     }
 });
+
+        // エディタ内容のYAML⇔CSV変換
+        for (const [id, convert, label] of [
+            ['#ksy-to-csv-btn', convertSchemaTextToCsv, 'CSV'],
+            ['#ksy-to-yaml-btn', convertSchemaTextToYaml, 'YAML'],
+        ] as const) {
+            document.querySelector<HTMLButtonElement>(id)!.addEventListener('click', () => {
+                const textArea = document.querySelector<HTMLTextAreaElement>('#ksyText')!;
+                if (!textArea.value.trim()) return;
+                try {
+                    textArea.value = convert(textArea.value);
+                } catch (err) {
+                    alert(`${label}への変換に失敗しました: ${err instanceof Error ? err.message : err}`);
+                }
+            });
+        }
 
 // KSYを保存
 document.querySelector<HTMLButtonElement>('#ksy-save-btn')!.addEventListener('click', () => {
