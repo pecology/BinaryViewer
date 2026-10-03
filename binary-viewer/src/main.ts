@@ -1919,7 +1919,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                         const typeInput = row.querySelector<HTMLInputElement>('.field-type');
                         const sizeInput = row.querySelector<HTMLInputElement>('.field-size');
                         const repeatInput = row.querySelector<HTMLInputElement>('.field-repeat');
-                        const ifInput = row.querySelector<HTMLInputElement>('.field-if');
+                        const ifInput = row.querySelector<HTMLTextAreaElement>('.field-if');
                         const consumeInput = row.querySelector<HTMLInputElement>('.field-consume');
                         const docInput = row.querySelector<HTMLTextAreaElement>('.field-doc');
                         
@@ -2044,6 +2044,57 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
         });
     };
 
+    const openExpandedTextEditor = (
+        source: HTMLInputElement | HTMLTextAreaElement,
+        expandButton: HTMLButtonElement,
+        title: string
+    ): void => {
+        const overlay = document.createElement('div');
+        overlay.className = 'field-doc-overlay';
+        overlay.innerHTML = `
+            <div class="field-doc-dialog" role="dialog" aria-modal="true" aria-labelledby="field-doc-title">
+                <div class="field-doc-dialog-header">
+                    <h3 id="field-doc-title"></h3>
+                    <button type="button" class="field-doc-close" aria-label="閉じる">&times;</button>
+                </div>
+                <textarea class="field-doc-expanded"></textarea>
+            </div>
+        `;
+
+        const dialogTextarea = overlay.querySelector<HTMLTextAreaElement>('.field-doc-expanded')!;
+        const closeButton = overlay.querySelector<HTMLButtonElement>('.field-doc-close')!;
+        overlay.querySelector<HTMLHeadingElement>('#field-doc-title')!.textContent = title;
+        dialogTextarea.setAttribute('aria-label', title);
+        dialogTextarea.value = source.value;
+        const syncFromSource = (): void => {
+            dialogTextarea.value = source.value;
+        };
+
+        const close = (): void => {
+            source.removeEventListener('input', syncFromSource);
+            overlay.remove();
+            if (expandButton.isConnected) expandButton.focus();
+        };
+
+        dialogTextarea.addEventListener('input', () => {
+            source.value = dialogTextarea.value;
+        });
+        source.addEventListener('input', syncFromSource);
+        closeButton.addEventListener('click', close);
+        overlay.addEventListener('click', (event) => {
+            if (event.target === overlay) close();
+        });
+        dialogTextarea.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                event.stopPropagation();
+                close();
+            }
+        });
+
+        document.body.appendChild(overlay);
+        dialogTextarea.focus();
+    };
+
     if (guiFieldsContainer) {
         guiFieldsContainer.addEventListener('input', validateGuiFields);
     }
@@ -2066,16 +2117,29 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                     <input type="text" list="type-options" class="field-type" placeholder="type (例: u1, png)" style="flex: 2; min-width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" />
                     <input type="text" class="field-size" placeholder="size" disabled style="flex: 1; min-width: 40px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="文字列等のサイズ指定(数値または式)" />
                     <input type="text" class="field-repeat" placeholder="回数 (任意)" style="flex: 1; min-width: 40px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="配列にする場合の繰り返し回数（固定値またはフィールド名）" />
-                    <input type="text" class="field-if" placeholder="if (条件)" style="flex: 1; min-width: 40px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;" title="条件付きパース (例: field == 1)" />
+                    <div class="field-if-control">
+                        <textarea class="field-if" rows="1" placeholder="if (条件)" title="条件付きパース (例: field == 1)"></textarea>
+                        <button type="button" class="field-if-expand" title="if条件を拡大して編集" aria-label="if条件を拡大して編集">⤢</button>
+                    </div>
                     <label style="display:flex; align-items:center; gap:4px; white-space:nowrap; font-size:12px;">
                         <input type="checkbox" class="field-consume" checked />
                         consume
                     </label>
                     <button class="field-delete-btn" style="padding: 4px 8px; background: #ffebee; color: #d32f2f; border: 1px solid #ffcdd2; border-radius: 4px; cursor: pointer;">✕</button>
                 </div>
-                <textarea class="field-doc" placeholder="説明 (改行可能)" rows="2" style="width: 100%; min-height: 0 !important; flex: none !important; resize: vertical; padding: 4px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 11px; font-family: sans-serif; line-height: 1.3;"></textarea>
+                <div class="field-doc-control">
+                    <textarea class="field-doc" placeholder="説明 (改行可能)" rows="2" style="min-height: 0 !important; padding: 4px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 11px; font-family: sans-serif; line-height: 1.3;"></textarea>
+                    <button type="button" class="field-doc-expand" title="説明を拡大して編集" aria-label="説明を拡大して編集">⤢</button>
+                </div>
             </div>
         `;
+
+        const docInput = row.querySelector<HTMLTextAreaElement>('.field-doc')!;
+        const docExpandButton = row.querySelector<HTMLButtonElement>('.field-doc-expand')!;
+        docExpandButton.addEventListener('click', () => openExpandedTextEditor(docInput, docExpandButton, 'フィールドの説明'));
+        const ifInput = row.querySelector<HTMLTextAreaElement>('.field-if')!;
+        const ifExpandButton = row.querySelector<HTMLButtonElement>('.field-if-expand')!;
+        ifExpandButton.addEventListener('click', () => openExpandedTextEditor(ifInput, ifExpandButton, 'if条件'));
 
         // 型がstr/strz/hex/bytesの場合はsizeを有効化
         const typeInput = row.querySelector<HTMLInputElement>('.field-type')!;
@@ -2139,7 +2203,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
             const fieldTypeInput = row.querySelector<HTMLInputElement>('.field-type');
             const fieldSizeInput = row.querySelector<HTMLInputElement>('.field-size');
             const fieldRepeatInput = row.querySelector<HTMLInputElement>('.field-repeat');
-            const fieldIfInput = row.querySelector<HTMLInputElement>('.field-if');
+            const fieldIfInput = row.querySelector<HTMLTextAreaElement>('.field-if');
             const fieldConsumeInput = row.querySelector<HTMLInputElement>('.field-consume');
             const fieldDocInput = row.querySelector<HTMLTextAreaElement>('.field-doc');
             
@@ -2172,7 +2236,12 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
             }
             
             if (fieldIf) {
-                yaml += `    if: ${fieldIf}\n`;
+                if (fieldIf.includes('\n')) {
+                    const indentedIf = fieldIf.split('\n').map(line => `      ${line}`).join('\n');
+                    yaml += `    if: |\n${indentedIf}\n`;
+                } else {
+                    yaml += `    if: ${fieldIf}\n`;
+                }
             }
             if (!fieldConsume) {
                 yaml += `    consume: false\n`;
