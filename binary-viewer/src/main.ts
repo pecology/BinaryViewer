@@ -317,19 +317,38 @@ function updateKsySchemaList(): void {
         item.addEventListener('click', () => {
             const name = item.dataset.name!;
             const content = loadKsy(name);
-            if (content) {
-                document.querySelector<HTMLTextAreaElement>('#ksyText')!.value = content;
-                document.querySelector<HTMLInputElement>('#ksy-save-name')!.value = name;
-                // 選択状態を表示
-                list.querySelectorAll('.ksy-list-item').forEach(i => i.classList.remove('selected'));
-                item.classList.add('selected');
+            if (!content) return;
+
+            const textArea = document.querySelector<HTMLTextAreaElement>('#ksyText')!;
+            const saveNameInput = document.querySelector<HTMLInputElement>('#ksy-save-name')!;
+            
+            // 現在編集中のスキーマ名と内容を取得
+            const currentName = saveNameInput.value.trim();
+            const currentContent = textArea.value;
+            
+            // 別のスキーマをクリックした場合、編集中の内容があるか確認
+            if (currentName !== name && currentContent.trim() !== '') {
+                const originalContent = currentName ? loadKsy(currentName) : null;
+                const hasChanges = originalContent !== currentContent;
                 
-                // もしGUIビルダーが表示中であれば、GUIのフィールドも最新の内容で同期する
-                const tabGui = document.querySelector<HTMLButtonElement>('#ksy-tab-gui');
-                if (tabGui && tabGui.classList.contains('active')) {
-                    if (typeof (window as any).syncYamlToGui === 'function') {
-                        (window as any).syncYamlToGui();
+                if (hasChanges) {
+                    if (!confirm(`「${currentName || '新規スキーマ'}」の変更内容が失われます。破棄してよろしいですか？`)) {
+                        return;
                     }
+                }
+            }
+
+            textArea.value = content;
+            saveNameInput.value = name;
+            // 選択状態を表示
+            list.querySelectorAll('.ksy-list-item').forEach(i => i.classList.remove('selected'));
+            item.classList.add('selected');
+            
+            // もしGUIビルダーが表示中であれば、GUIのフィールドも最新の内容で同期する
+            const tabGui = document.querySelector<HTMLButtonElement>('#ksy-tab-gui');
+            if (tabGui && tabGui.classList.contains('active')) {
+                if (typeof (window as any).syncYamlToGui === 'function') {
+                    (window as any).syncYamlToGui();
                 }
             }
         });
