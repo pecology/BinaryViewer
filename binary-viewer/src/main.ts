@@ -29,13 +29,20 @@ let structureSearchMatches: HTMLDetailsElement[] = [];
 let activeStructureSearchIndex = -1;
 
 interface DumpLogRecord {
-    timestamp: string | null;
+    // 区切りに一致した文字列（先頭の区切り前の部分は null）
+    label: string | null;
     message: string | null;
     lineNumber: number;
-    data: Uint8Array | null;
+    // sourceText 内の16進数ダンプ部分の範囲
+    bodyStart: number;
+    bodyEnd: number;
+    // 選択されるまでデコード・パースしない（undefined = 未デコード、null = デコード失敗）
+    data?: Uint8Array | null;
     result?: BinaryRange;
     error?: string;
 }
+
+const defaultDumpLogSplitPattern = String.raw`\[\d{4}/\d{1,2}/\d{1,2} \d{1,2}:\d{2}:\d{2}(?:\.\d{1,3})?\]`;
 
 function selectStructureSearchResult(index: number): void {
     if (structureSearchMatches.length === 0) return;
@@ -103,9 +110,9 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div class="dump-log-options">
           <label class="dump-log-toggle"><input id="dump-log-mode" type="checkbox"> ダンプログとして解析</label>
           <div id="dump-log-settings" hidden>
-              <label for="dump-log-date-format">日時形式</label>
-              <input id="dump-log-date-format" type="text" value="[yyyy/M/d HH:mm:ss.fff]" spellcheck="false">
-              <small>例: [yyyy/M/d HH:mm:ss.fff]（角括弧・ミリ秒は省略可能）</small>
+              <label for="dump-log-split-pattern">区切り（正規表現）</label>
+              <input id="dump-log-split-pattern" type="text" spellcheck="false">
+              <small>一致した箇所ごとにレコードを分割します。一致した行の残りはメッセージ、次の行以降は16進数ダンプとして扱います</small>
           </div>
       </div>
       <div id="current-file-name" class="current-file-name"></div>
@@ -417,7 +424,7 @@ document.querySelector<HTMLSelectElement>('#parser-select')!.addEventListener('c
     }
     
     // データがあれば再パース
-    if (editableData) {
+    if (editableData || dumpLogMode) {
         parseAndDisplay();
     }
 });
@@ -460,7 +467,8 @@ const dumpLogModeInput = document.querySelector<HTMLInputElement>('#dump-log-mod
 const dumpLogSettings = document.querySelector<HTMLDivElement>('#dump-log-settings')!;
 const dumpLogPanel = document.querySelector<HTMLDivElement>('#dump-log-panel')!;
 const dumpLogLayout = document.querySelector<HTMLDivElement>('.three-column-layout')!;
-const dumpLogDateFormat = document.querySelector<HTMLInputElement>('#dump-log-date-format')!;
+const dumpLogSplitPattern = document.querySelector<HTMLInputElement>('#dump-log-split-pattern')!;
+dumpLogSplitPattern.value = defaultDumpLogSplitPattern;
 const dumpLogRecordsElement = document.querySelector<HTMLDivElement>('#dump-log-records')!;
 const dumpLogFilterInput = document.querySelector<HTMLInputElement>('#dump-log-filter')!;
 const hexTextInput = document.querySelector<HTMLTextAreaElement>('#hex-text-input')!;
@@ -471,7 +479,7 @@ dumpLogModeInput.addEventListener('change', async () => {
     dumpLogPanel.hidden = !dumpLogMode;
     dumpLogLayout.classList.toggle('dump-log-layout', dumpLogMode);
     hexTextInput.placeholder = dumpLogMode
-        ? 'ダンプログを貼り付け (日時行と16進数ダンプ行)'
+        ? 'ダンプログを貼り付け (区切りの正規表現でレコードに分割)'
         : 'Hexテキスト入力 (例: 01 02 0A... 入力すると自動パースされます)';
     hexTextInput.style.height = dumpLogMode ? '180px' : '60px';
 
@@ -482,7 +490,7 @@ dumpLogModeInput.addEventListener('change', async () => {
     }
 });
 
-dumpLogDateFormat.addEventListener('change', () => {
+dumpLogSplitPattern.addEventListener('change', () => {
     if (dumpLogMode && sourceText !== null) {
         processDumpLog(sourceText);
     }
@@ -788,7 +796,7 @@ document.querySelector<HTMLButtonElement>('#ksy-save-btn')!.addEventListener('cl
         });
         
         // ファイルが読み込まれていれば自動でパースを実行
-        if (editableData) {
+        if (editableData || dumpLogMode) {
             parseAndDisplay();
         }
         
@@ -947,8 +955,17 @@ async function parseAndDisplay(): Promise<void> {
     clearError();
 
     if (dumpLogMode) {
-        if (sourceText !== null) {
-            processDumpLog(sourceText);
+        // パーサーが変わったので分割はそのままにパース結果だけ破棄し、選択中のレコードを再パースする
+        for (const record of dumpLogRecords) {
+            record.result = undefined;
+            if (record.data) record.error = undefined;
+        }
+        dumpLogFilteredIndicesCache = null;
+        if (dumpLogRecords[selectedDumpLogRecord]) {
+            selectDumpLogRecord(selectedDumpLogRecord);
+        } else {
+            renderDumpLogRecords();
+            updateDumpLogSummary();
         }
         return;
     }
@@ -992,72 +1009,6 @@ function parseData(data: Uint8Array, parserType: ParserType): BinaryRange {
     throw new Error('不明なパーサータイプ');
 }
 
-const dateFormatTokens = ['yyyy', 'SSS', 'fff', 'MM', 'dd', 'HH', 'mm', 'ss', 'M', 'd'] as const;
-
-function createDateMatcher(format: string): RegExp {
-    if (!format.trim()) {
-        throw new Error('日時形式を入力してください');
-    }
-
-    let source = '';
-    let index = 0;
-    while (index < format.length) {
-        const token = dateFormatTokens.find(candidate => format.startsWith(candidate, index));
-        if (token) {
-            const pattern = token === 'yyyy' ? '\\d{4}'
-                : token === 'SSS' || token === 'fff' ? '\\d{1,3}'
-                : token.length === 2 ? '\\d{2}'
-                : '\\d{1,2}';
-            source += `(${pattern})`;
-            index += token.length;
-        } else {
-            source += format[index].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            index++;
-        }
-    }
-    const hasMilliseconds = format.includes('SSS') || format.includes('fff');
-    const hasSeconds = format.includes('ss');
-    if (hasSeconds && !hasMilliseconds) {
-        source += '(?:\\.(\\d{1,3}))?';
-    }
-
-    const hasBrackets = format.startsWith('[') && format.endsWith(']');
-    return new RegExp(hasBrackets ? source : `\\[?${source}\\]?`);
-}
-
-function isValidDateMatch(match: RegExpExecArray, format: string): boolean {
-    const values: Record<string, number> = {};
-    let captureIndex = 1;
-    for (let index = 0; index < format.length;) {
-        const token = dateFormatTokens.find(candidate => format.startsWith(candidate, index));
-        if (token) {
-            const value = Number(match[captureIndex++]);
-            const key = token === 'yyyy' ? 'year'
-                : token === 'M' || token === 'MM' ? 'month'
-                : token === 'd' || token === 'dd' ? 'day'
-                : token === 'HH' ? 'hour'
-                : token === 'mm' ? 'minute'
-                : token === 'ss' ? 'second'
-                : 'millisecond';
-            values[key] = value;
-            index += token.length;
-        } else {
-            index++;
-        }
-    }
-
-    if (values.month !== undefined && (values.month < 1 || values.month > 12)) return false;
-    if (values.day !== undefined && (values.day < 1 || values.day > 31)) return false;
-    if (values.year !== undefined && values.month !== undefined && values.day !== undefined) {
-        const daysInMonth = new Date(Date.UTC(values.year, values.month, 0)).getUTCDate();
-        if (values.day > daysInMonth) return false;
-    }
-    if (values.hour !== undefined && values.hour > 23) return false;
-    if (values.minute !== undefined && values.minute > 59) return false;
-    if (values.second !== undefined && values.second > 59) return false;
-    return true;
-}
-
 function processDumpLog(text: string): void {
     sourceText = text;
     currentFileName = sourceFile?.name ?? '[Text Input]';
@@ -1070,70 +1021,49 @@ function processDumpLog(text: string): void {
     dumpLogFilteredIndicesCache = null;
     dumpLogRecordsElement.scrollTop = 0;
 
-    let dateMatcher: RegExp;
+    let splitter: RegExp;
     try {
-        dateMatcher = createDateMatcher(dumpLogDateFormat.value);
+        if (!dumpLogSplitPattern.value) {
+            throw new Error('区切りの正規表現を入力してください');
+        }
+        splitter = new RegExp(dumpLogSplitPattern.value, 'gm');
     } catch (error) {
-        showError(error instanceof Error ? error.message : String(error));
+        showError(error instanceof SyntaxError
+            ? `区切りの正規表現が不正です: ${error.message}`
+            : error instanceof Error ? error.message : String(error));
         renderDumpLogRecords();
         updateDumpLogSummary();
         clearDisplayedParseResult();
         return;
     }
 
-    let currentTimestamp: string | null = null;
-    let currentMessage: string | null = null;
-    const lines = text.split(/\r?\n/);
-    lines.forEach((line, lineIndex) => {
-        const trimmed = line.trim();
-        if (!trimmed || /^(?:\.{3,}|…+)$/.test(trimmed)) return;
+    // 区切りの一致位置で分割するだけで、この時点ではデコード・パースしない
+    const matches = [...text.matchAll(splitter)];
+    const firstMatchIndex = matches[0]?.index ?? text.length;
+    if (text.slice(0, firstMatchIndex).trim()) {
+        dumpLogRecords.push({ label: null, message: null, lineNumber: 1, bodyStart: 0, bodyEnd: firstMatchIndex });
+    }
 
-        const dateMatch = dateMatcher.exec(line);
-        if (dateMatch && isValidDateMatch(dateMatch, dumpLogDateFormat.value)) {
-            currentTimestamp = dateMatch[0];
-            currentMessage = line.slice(dateMatch.index + dateMatch[0].length).trim() || null;
-            return;
+    let lineNumber = 1;
+    let countedUntil = 0;
+    matches.forEach((match, matchIndex) => {
+        for (let i = countedUntil; i < match.index; i++) {
+            if (text.charCodeAt(i) === 10) lineNumber++;
         }
+        countedUntil = match.index;
 
-        const tokens = trimmed.split(/[\s-]+/).filter(Boolean);
-        const hasHexToken = tokens.some(token => /^[0-9a-f]+$/i.test(token));
-        if (!hasHexToken) return;
-
-        if (!tokens.every(token => /^(?:[0-9a-f]{2})+$/i.test(token))) {
-            dumpLogRecords.push({
-                timestamp: currentTimestamp,
-                message: currentMessage,
-                lineNumber: lineIndex + 1,
-                data: null,
-                error: '16進数バイト列として読めないトークンがあります',
-            });
-            return;
-        }
-
-        const bytes: number[] = [];
-        for (const token of tokens) {
-            for (let index = 0; index < token.length; index += 2) {
-                bytes.push(parseInt(token.slice(index, index + 2), 16));
-            }
-        }
-
+        const labelEnd = match.index + match[0].length;
+        const segmentEnd = matches[matchIndex + 1]?.index ?? text.length;
+        const lineEnd = text.indexOf('\n', labelEnd);
+        const bodyStart = lineEnd === -1 || lineEnd >= segmentEnd ? segmentEnd : lineEnd + 1;
         dumpLogRecords.push({
-            timestamp: currentTimestamp,
-            message: currentMessage,
-            lineNumber: lineIndex + 1,
-            data: Uint8Array.from(bytes),
+            label: match[0],
+            message: text.slice(labelEnd, bodyStart).trim() || null,
+            lineNumber,
+            bodyStart,
+            bodyEnd: segmentEnd,
         });
     });
-
-    const parserType = getCurrentParserValue();
-    for (const record of dumpLogRecords) {
-        if (!record.data) continue;
-        try {
-            record.result = parseData(record.data, parserType);
-        } catch (error) {
-            record.error = error instanceof Error ? error.message : String(error);
-        }
-    }
 
     renderDumpLogRecords();
     updateDumpLogSummary();
@@ -1142,9 +1072,53 @@ function processDumpLog(text: string): void {
         selectDumpLogRecord(0);
     } else {
         clearDisplayedParseResult();
-        if (text.trim()) {
-            showError('日時行の後に16進数ダンプ行が見つかりません');
+    }
+}
+
+// 16進数ダンプ部分をバイト列に変換する（失敗時はエラーメッセージを投げる）
+function decodeDumpLogBody(body: string, firstLineNumber: number): Uint8Array {
+    const bytes: number[] = [];
+    body.split(/\r?\n/).forEach((line, lineIndex) => {
+        const trimmed = line.trim();
+        if (!trimmed || /^(?:\.{3,}|…+)$/.test(trimmed)) return;
+
+        const tokens = trimmed.split(/[\s-]+/).filter(Boolean);
+        if (!tokens.every(token => /^(?:[0-9a-f]{2})+$/i.test(token))) {
+            throw new Error(`${firstLineNumber + lineIndex} 行目: 16進数バイト列として読めないトークンがあります`);
         }
+        for (const token of tokens) {
+            for (let index = 0; index < token.length; index += 2) {
+                bytes.push(parseInt(token.slice(index, index + 2), 16));
+            }
+        }
+    });
+    if (bytes.length === 0) {
+        throw new Error('16進数ダンプがありません');
+    }
+    return Uint8Array.from(bytes);
+}
+
+// 未パースのレコードをデコード・パースする（結果はレコードにキャッシュ）
+function ensureDumpLogRecordParsed(record: DumpLogRecord): void {
+    if (record.result || record.error) return;
+
+    if (record.data === undefined) {
+        try {
+            const body = sourceText?.slice(record.bodyStart, record.bodyEnd) ?? '';
+            const bodyLineNumber = record.label === null ? record.lineNumber : record.lineNumber + 1;
+            record.data = decodeDumpLogBody(body, bodyLineNumber);
+        } catch (error) {
+            record.data = null;
+            record.error = error instanceof Error ? error.message : String(error);
+            return;
+        }
+    }
+    if (!record.data) return;
+
+    try {
+        record.result = parseData(record.data, getCurrentParserValue());
+    } catch (error) {
+        record.error = error instanceof Error ? error.message : String(error);
     }
 }
 
@@ -1188,21 +1162,21 @@ function renderDumpLogRecords(): void {
         button.className = `dump-log-record${index === selectedDumpLogRecord ? ' selected' : ''}`;
         const heading = document.createElement('span');
         heading.className = 'dump-log-record-heading';
-        const timestamp = document.createElement('span');
-        timestamp.className = 'dump-log-record-time';
-        timestamp.textContent = record.timestamp ?? '日時なし';
+        const label = document.createElement('span');
+        label.className = 'dump-log-record-time';
+        label.textContent = getDumpLogRecordLabel(record);
         const message = document.createElement('span');
         message.className = 'dump-log-record-message';
         message.textContent = record.message ?? '';
-        heading.append(timestamp, message);
+        heading.append(label, message);
         const meta = document.createElement('span');
         meta.className = 'dump-log-record-meta';
-        meta.textContent = `行 ${record.lineNumber} · ${record.data?.length ?? 0} B`;
+        meta.textContent = getDumpLogRecordMeta(record);
         const status = document.createElement('span');
-        status.className = `dump-log-record-status${record.error ? ' error' : ''}`;
-        status.textContent = record.error ? 'エラー' : '成功';
+        status.className = `dump-log-record-status${record.error ? ' error' : record.result ? '' : ' pending'}`;
+        status.textContent = getDumpLogRecordStatus(record);
         button.append(heading, meta, status);
-        button.title = [record.timestamp, record.message, record.error ?? `ログ ${record.lineNumber} 行目`]
+        button.title = [record.label, record.message, record.error ?? `ログ ${record.lineNumber} 行目`]
             .filter(Boolean)
             .join(' · ');
         visibleRowElements.push(button);
@@ -1211,16 +1185,27 @@ function renderDumpLogRecords(): void {
     dumpLogVirtualRows.replaceChildren(...visibleRowElements);
 }
 
+function getDumpLogRecordLabel(record: DumpLogRecord): string {
+    return record.label === null ? '(区切り前)' : record.label || '(空の一致)';
+}
+
+function getDumpLogRecordMeta(record: DumpLogRecord): string {
+    return record.data ? `行 ${record.lineNumber} · ${record.data.length} B` : `行 ${record.lineNumber}`;
+}
+
+function getDumpLogRecordStatus(record: DumpLogRecord): string {
+    return record.error ? 'エラー' : record.result ? '成功' : '未解析';
+}
+
 function getFilteredDumpLogIndices(): number[] {
     if (dumpLogFilteredIndicesCache === null) {
         dumpLogFilteredIndicesCache = dumpLogRecords.flatMap((record, index) => {
             if (!dumpLogFilter) return [index];
             const searchableText = [
-                record.timestamp ?? '日時なし',
+                getDumpLogRecordLabel(record),
                 record.message ?? '',
-                `行 ${record.lineNumber}`,
-                `${record.data?.length ?? 0} B`,
-                record.error ? 'エラー' : '成功',
+                getDumpLogRecordMeta(record),
+                getDumpLogRecordStatus(record),
                 record.error ?? '',
             ].join(' ').toLocaleLowerCase();
             return searchableText.includes(dumpLogFilter) ? [index] : [];
@@ -1241,11 +1226,14 @@ function selectDumpLogRecord(index: number): void {
     if (!record) return;
 
     selectedDumpLogRecord = index;
+    // 選択した時点で初めてデコード・パースする
+    ensureDumpLogRecordParsed(record);
     renderDumpLogRecords();
-    editableData = record.data;
+    updateDumpLogSummary();
+    editableData = record.data ?? null;
     document.querySelector<HTMLButtonElement>('#download-btn')!.disabled = true;
     document.querySelector<HTMLSpanElement>('#current-file-name')!.textContent =
-        `${currentFileName || '[Text Input]'} · ${record.timestamp ?? '日時なし'} · 行 ${record.lineNumber}`;
+        `${currentFileName || '[Text Input]'} · ${getDumpLogRecordLabel(record)} · 行 ${record.lineNumber}`;
 
     if (record.result) {
         currentParseResult = record.result;
@@ -1253,7 +1241,7 @@ function selectDumpLogRecord(index: number): void {
         displayParseResult(record.result);
     } else {
         clearDisplayedParseResult();
-        showError(`ログ ${record.lineNumber} 行目: ${record.error ?? '解析できません'}`);
+        showError(`レコード (行 ${record.lineNumber}): ${record.error ?? '解析できません'}`);
     }
 }
 
@@ -1314,7 +1302,7 @@ async function reparseAfterEdit(): Promise<void> {
             displayParseResult(record.result);
         } else {
             clearDisplayedParseResult();
-            showError(`ログ ${record.lineNumber} 行目: ${record.error}`);
+            showError(`レコード (行 ${record.lineNumber}): ${record.error}`);
         }
         return;
     }

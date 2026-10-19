@@ -142,7 +142,7 @@ h1 {
   font-size: 11px;
 }
 
-#dump-log-date-format {
+#dump-log-split-pattern {
   box-sizing: border-box;
   width: 100%;
   padding: 6px 7px;
@@ -286,6 +286,10 @@ h1 {
 
 .dump-log-record-status.error {
   color: #b42318;
+}
+
+.dump-log-record-status.pending {
+  color: #888;
 }
 
 .dump-log-empty {
