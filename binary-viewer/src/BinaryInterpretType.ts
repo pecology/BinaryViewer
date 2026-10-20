@@ -1,6 +1,49 @@
+/**
+ * 数値・バイト列の表示基数
+ * - 'auto': 型ごとの既定（整数は10進、バイト列は16進）
+ * - 10 / 16: 整数・バイト列をすべてその基数で表示
+ */
+export type DisplayRadix = 'auto' | 10 | 16;
+
+export interface InterpretOptions {
+    radix?: DisplayRadix;
+}
+
 export interface BinaryInterpretType {
     toString(): string;
-    interpret(bytes: Uint8Array): string;
+    interpret(bytes: Uint8Array, options?: InterpretOptions): string;
+}
+
+/**
+ * 整数を表示用の文字列にする
+ * 16進は符号に関係なくバイト列そのままの値（2の補数）を、サイズ分ゼロ埋めして表示する
+ */
+export function formatInteger(bytes: Uint8Array, size: number, signed: boolean, littleEndian: boolean, radix: DisplayRadix = 'auto'): string {
+    if (bytes.length < size) {
+        throw new Error(`Insufficient bytes for ${size}-byte integer`);
+    }
+    let unsigned = 0;
+    for (let i = 0; i < size; i++) {
+        const byte = bytes[littleEndian ? size - 1 - i : i];
+        unsigned = unsigned * 256 + byte;
+    }
+    if (radix === 16) {
+        return `0x${unsigned.toString(16).toUpperCase().padStart(size * 2, '0')}`;
+    }
+    const max = 2 ** (size * 8);
+    const value = signed && unsigned >= max / 2 ? unsigned - max : unsigned;
+    return value.toString();
+}
+
+/**
+ * バイト列を表示用の文字列にする
+ * 16進は "0x" + 連結した16進数、10進は1バイトずつ空白区切り
+ */
+export function formatBytes(bytes: Uint8Array, radix: 10 | 16): string {
+    if (radix === 10) {
+        return Array.from(bytes).join(' ');
+    }
+    return '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
 }
 
 export class Int16LE implements BinaryInterpretType {
@@ -8,12 +51,8 @@ export class Int16LE implements BinaryInterpretType {
         return "Int16LE";
     }
 
-    interpret(bytes: Uint8Array): string {
-        if (bytes.length < 2) {
-            throw new Error("Insufficient bytes for Int16LE");
-        }
-        const value = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getInt16(0, true);
-        return value.toString();
+    interpret(bytes: Uint8Array, options?: InterpretOptions): string {
+        return formatInteger(bytes, 2, true, true, options?.radix);
     }
 }
 
@@ -22,12 +61,8 @@ export class Int32LE implements BinaryInterpretType {
         return "Int32LE";
     }
 
-    interpret(bytes: Uint8Array): string {
-        if (bytes.length < 4) {
-            throw new Error("Insufficient bytes for Int32LE");
-        }
-        const value = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getInt32(0, true);
-        return value.toString();
+    interpret(bytes: Uint8Array, options?: InterpretOptions): string {
+        return formatInteger(bytes, 4, true, true, options?.radix);
     }
 }
 
@@ -114,24 +149,12 @@ export class TextEncoding implements BinaryInterpretType {
     }
 }
 
-export class HexEncoding implements BinaryInterpretType {
-    toString(): string {
-        return "Hex";
-    }
-    interpret(bytes: Uint8Array): string {
-        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
-    }
-}
-
 export class BytesHexEncoding implements BinaryInterpretType {
     toString(): string {
-        return "Hex";
+        return "Bytes";
     }
-    interpret(bytes: Uint8Array): string {
-        const hex = Array.from(bytes)
-            .map(b => b.toString(16).padStart(2, '0').toUpperCase())
-            .join('');
-        return `0x${hex}`;
+    interpret(bytes: Uint8Array, options?: InterpretOptions): string {
+        return formatBytes(bytes, options?.radix === 10 ? 10 : 16);
     }
 }
 

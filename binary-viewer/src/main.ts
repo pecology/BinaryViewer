@@ -6,6 +6,7 @@ import { saveExtensionMapping, getParserForExtension, getExtensionFromFileName, 
 import { getBuiltinParsers, getBuiltinParser } from './parserRegistry.ts'
 import { setupColumnResizers, applyColumnLayout } from './columnResizer.ts'
 import type { BinaryRange } from './BinaryRange.ts'
+import type { DisplayRadix } from './BinaryInterpretType.ts'
 
 // 現在読み込んでいるバイナリデータ（編集可能）
 // パース時は editableData.buffer でArrayBufferとして渡す
@@ -28,6 +29,18 @@ let currentParseResult: BinaryRange | null = null;
 let bytesPerPage = 1024;
 let structureSearchMatches: HTMLDetailsElement[] = [];
 let activeStructureSearchIndex = -1;
+// 構造ツリーでの整数・バイト列の表示基数（localStorage に保存）
+const VALUE_RADIX_STORAGE_KEY = 'display:value-radix';
+let valueRadix: DisplayRadix = loadValueRadix();
+
+function loadValueRadix(): DisplayRadix {
+    try {
+        const saved = localStorage.getItem(VALUE_RADIX_STORAGE_KEY);
+        return saved === '10' ? 10 : saved === '16' ? 16 : 'auto';
+    } catch {
+        return 'auto';
+    }
+}
 
 interface DumpLogRecord {
     // 区切りに一致した文字列（先頭の区切り前の部分は null）
@@ -149,7 +162,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div>
     </div>
     <div class="panel structure-panel" data-column="structure">
-            <h3>構造 <span class="structure-controls"><input id="structure-search-input" type="search" placeholder="構造を検索" aria-label="構造を検索"><button id="expand-all-btn" title="全て開く">▼ 全開</button><button id="collapse-all-btn" title="全て閉じる">▶ 全閉</button></span></h3>
+            <h3>構造 <span class="structure-controls"><input id="structure-search-input" type="search" placeholder="構造を検索" aria-label="構造を検索"><select id="value-radix-select" title="整数・バイト列の表示形式" aria-label="値の表示形式"><option value="auto">既定</option><option value="10">10進</option><option value="16">16進</option></select><button id="expand-all-btn" title="全て開く">▼ 全開</button><button id="collapse-all-btn" title="全て閉じる">▶ 全閉</button></span></h3>
       <div class="details-wrapper"></div>
     </div>
   </div>
@@ -440,6 +453,27 @@ structureSearchInput.addEventListener('keydown', (e) => {
             .querySelector<HTMLElement>(':scope > summary .cancel-toggle')
             ?.click();
     }
+});
+
+// 値の表示形式（既定 / 10進 / 16進）の切り替え。再パースはせず構造ツリーだけ描き直す
+const valueRadixSelect = document.querySelector<HTMLSelectElement>('#value-radix-select')!;
+valueRadixSelect.value = String(valueRadix);
+valueRadixSelect.addEventListener('change', () => {
+    valueRadix = valueRadixSelect.value === '10' ? 10 : valueRadixSelect.value === '16' ? 16 : 'auto';
+    try {
+        localStorage.setItem(VALUE_RADIX_STORAGE_KEY, String(valueRadix));
+    } catch {
+        // 保存できなくても、このページを開いている間は切り替えが有効
+    }
+    if (!currentParseResult) return;
+
+    const wrapper = document.querySelector<HTMLDivElement>('.details-wrapper')!;
+    const accordionState = saveAccordionState();
+    const scrollTop = wrapper.scrollTop;
+    wrapper.innerHTML = toStructureHtmlString(currentParseResult);
+    restoreAccordionState(accordionState);
+    wrapper.scrollTop = scrollTop;
+    updateStructureSearch();
 });
 
 // アコーディオン全開ボタン
@@ -1792,7 +1826,7 @@ const toStructureHtmlString = (segment: BinaryRange): string => {
     return `
 <details data-name="${encodeURIComponent(segment.name)}" data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0"${titleAttr}>
   <summary><span class="cancel-toggle"> ${escapeHtml(segment.name)} (${rangeToString(segment)})</span></summary>
-    ${escapeHtml(segment.interpret())}
+    ${escapeHtml(segment.interpret({ radix: valueRadix }))}
     ${segment.subRanges.reduce((acc, child) => acc + toStructureHtmlString(child), "")}
 </details>
 `;
@@ -1949,7 +1983,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                             typeInput.value = field.type;
                         }
                         if (sizeInput) {
-                            if (field.type === 'str' || field.type === 'strz' || field.type === 'hex' || field.type === 'bytes') {
+                            if (field.type === 'str' || field.type === 'strz' || field.type === 'bytes') {
                                 sizeInput.disabled = false;
                                 sizeInput.value = field.size !== undefined ? String(field.size) : '';
                             } else {
@@ -2000,7 +2034,6 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                 <option value="s4">符号あり4byte</option>
                 <option value="str">文字列</option>
                 <option value="strz">NULL終端文字列</option>
-                <option value="hex">16進数文字列</option>
                 <option value="bytes">バイト配列</option>
                 ${customSchemas.map(name => `<option value="${name}">保存済みスキーマ</option>`).join('')}
             `;
@@ -2162,11 +2195,11 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
         const ifExpandButton = row.querySelector<HTMLButtonElement>('.field-if-expand')!;
         ifExpandButton.addEventListener('click', () => openExpandedTextEditor(ifInput, ifExpandButton, 'if条件'));
 
-        // 型がstr/strz/hex/bytesの場合はsizeを有効化
+        // 型がstr/strz/bytesの場合はsizeを有効化
         const typeInput = row.querySelector<HTMLInputElement>('.field-type')!;
         const sizeInput = row.querySelector<HTMLInputElement>('.field-size')!;
         typeInput.addEventListener('input', () => {
-            if (typeInput.value === 'str' || typeInput.value === 'strz' || typeInput.value === 'hex' || typeInput.value === 'bytes') {
+            if (typeInput.value === 'str' || typeInput.value === 'strz' || typeInput.value === 'bytes') {
                 sizeInput.disabled = false;
             } else {
                 sizeInput.disabled = true;
@@ -2273,7 +2306,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                 yaml += `    doc: |\n${indentedDoc}\n`;
             }
 
-            if (fieldType === 'str' || fieldType === 'hex' || fieldType === 'bytes') {
+            if (fieldType === 'str' || fieldType === 'bytes') {
                 if (!fieldSize) {
                     if (!silent) {
                         alert(`フィールド "${fieldId}" (${fieldType}) にはサイズ(数値またはフィールド参照)が必要です。`);

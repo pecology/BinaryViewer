@@ -68,8 +68,8 @@ export interface KsyContentsArrayField extends KsyContentsField, WithRepeat {}
  * size が必須（strz の場合は最大サイズとして使用、省略可能な場合もある）
  */
 export interface KsyStringField extends KsyFieldBase {
-    /** 型名 ('str', 'strz', 'hex') */
-    type: 'str' | 'strz' | 'hex';
+    /** 型名 ('str', 'strz') */
+    type: 'str' | 'strz';
     /** サイズ（数値またはフィールド参照） */
     size?: number | string;
     /** 文字列エンコーディング */
@@ -145,9 +145,9 @@ export function isContentsField(field: KsyField): field is KsyContentsField | Ks
     return 'contents' in field && Array.isArray(field.contents);
 }
 
-/** 文字列型フィールドかどうか（hex含む） */
+/** 文字列型フィールドかどうか */
 export function isStringField(field: KsyField): field is KsyStringField | KsyStringArrayField {
-    return field.type === 'str' || field.type === 'strz' || field.type === 'hex';
+    return field.type === 'str' || field.type === 'strz';
 }
 
 /** 生バイト列フィールドかどうか */
@@ -236,7 +236,7 @@ export function parsePrimitiveType(typeName: string, defaultEndian?: Endian): Pr
  * 文字列型かどうか判定
  */
 export function isStringType(typeName: string): boolean {
-    return typeName === 'str' || typeName === 'strz' || typeName === 'hex';
+    return typeName === 'str' || typeName === 'strz';
 }
 
 /**

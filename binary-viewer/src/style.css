@@ -411,6 +411,15 @@ body.column-resizing {
   font-size: 11px;
 }
 
+.structure-controls select {
+  padding: 1px 2px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background-color: #fff;
+  color: #666;
+  font-size: 11px;
+}
+
 .structure-controls button {
   padding: 2px 8px;
   font-size: 11px;

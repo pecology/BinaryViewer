@@ -53,3 +53,6 @@ GeneralPurposeBitFlagによってはファイル名をUTF8で解釈する必要�
 [ ] KSY 式: size / repeat-expr に数値かフィールド名しか書けない（length - 2 などの算術、_parent / _root は不可）
 [ ] テストがない。パーサー（ZIP・Text・KSY）は純粋関数なので、vitest などで単体テストを書きやすい
 [ ] counter.ts が未使用（Vite テンプレートの残骸）
+
+[x] KSY: hex 型と bytes 型の役割が重なっている（違いは表示の 0x の有無と、式から参照したときの値が文字列か Uint8Array かだけ）。どちらかに統一したい → hex 型を削除して bytes に一本化した
+[ ] 値の表示形式（既定/10進/16進）を切り替えると構造ツリーを描き直すため、Hex クリックで付けた構造側のハイライトが消える

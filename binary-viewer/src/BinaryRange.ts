@@ -1,4 +1,4 @@
-import type { BinaryInterpretType } from "./BinaryInterpretType";
+import type { BinaryInterpretType, InterpretOptions } from "./BinaryInterpretType";
 
 export class BinaryRange {
     data: Uint8Array;
@@ -15,13 +15,13 @@ export class BinaryRange {
         this.doc = doc;
     }
 
-    interpret() {
+    interpret(options?: InterpretOptions) {
         if (this.binaryInterpretType === null)
         {
             return "";
         } else
         {
-            return `${this.binaryInterpretType.interpret(this.data)} (${this.binaryInterpretType.toString()})`;
+            return `${this.binaryInterpretType.interpret(this.data, options)} (${this.binaryInterpretType.toString()})`;
         }
     }
 
