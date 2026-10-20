@@ -4,6 +4,7 @@ import { convertSchemaTextToCsv, convertSchemaTextToYaml } from './ksy/CsvSchema
 import { saveKsy, loadKsy, deleteKsy, listKsyNames, hasKsy, exportAllKsy, importKsy } from './ksyStorage.ts'
 import { saveExtensionMapping, getParserForExtension, getExtensionFromFileName, getAllExtensionMappings, removeExtensionMapping, type ParserType } from './extensionMapping.ts'
 import { getBuiltinParsers, getBuiltinParser } from './parserRegistry.ts'
+import { setupColumnResizers, applyColumnLayout } from './columnResizer.ts'
 import type { BinaryRange } from './BinaryRange.ts'
 
 // 現在読み込んでいるバイナリデータ（編集可能）
@@ -97,7 +98,7 @@ function chunk<T>(source: Iterable<T>, chunkSize: number): T[][] {
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="three-column-layout">
-    <div class="panel input-panel">
+    <div class="panel input-panel" data-column="input">
       <h3>入力</h3>
         ${import.meta.env.PROD && window.location.protocol !== 'file:' ? '<a class="standalone-download" href="./BinaryViewer.html" download="BinaryViewer.html">単一HTMLをダウンロード</a>' : ''}
       <div id="drop-zone" class="drop-zone" tabindex="0">
@@ -131,7 +132,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div>
       <div id="error-message" class="error-message"></div>
     </div>
-        <div id="dump-log-panel" class="panel dump-log-panel" hidden>
+        <div id="dump-log-panel" class="panel dump-log-panel" data-column="dump-log" hidden>
             <h3>ダンプレコード</h3>
             <div class="dump-log-list-tools">
                     <div id="dump-log-summary" aria-live="polite"></div>
@@ -139,7 +140,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
             </div>
             <div id="dump-log-records" aria-label="ダンプレコード一覧"></div>
         </div>
-    <div class="panel hex-panel">
+    <div class="panel hex-panel" data-column="hex">
       <h3>Hex <span id="edit-hint" class="edit-hint">(ダブルクリックで編集)</span></h3>
       <div id="hex-table-control"></div>
       <div id="hex-table"></div>
@@ -147,7 +148,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <button id="download-btn" disabled>💾 編集したデータをダウンロード</button>
       </div>
     </div>
-    <div class="panel structure-panel">
+    <div class="panel structure-panel" data-column="structure">
             <h3>構造 <span class="structure-controls"><input id="structure-search-input" type="search" placeholder="構造を検索" aria-label="構造を検索"><button id="expand-all-btn" title="全て開く">▼ 全開</button><button id="collapse-all-btn" title="全て閉じる">▶ 全閉</button></span></h3>
       <div class="details-wrapper"></div>
     </div>
@@ -473,11 +474,17 @@ const dumpLogRecordsElement = document.querySelector<HTMLDivElement>('#dump-log-
 const dumpLogFilterInput = document.querySelector<HTMLInputElement>('#dump-log-filter')!;
 const hexTextInput = document.querySelector<HTMLTextAreaElement>('#hex-text-input')!;
 
+// 狭い画面のダンプログ表示は2x2のグリッドになるため、列幅のドラッグ変更は無効にする（style.css と同じ条件）
+const narrowLayoutQuery = window.matchMedia('(max-width: 900px)');
+setupColumnResizers(dumpLogLayout, () => dumpLogMode && narrowLayoutQuery.matches);
+narrowLayoutQuery.addEventListener('change', applyColumnLayout);
+
 dumpLogModeInput.addEventListener('change', async () => {
     dumpLogMode = dumpLogModeInput.checked;
     dumpLogSettings.hidden = !dumpLogMode;
     dumpLogPanel.hidden = !dumpLogMode;
     dumpLogLayout.classList.toggle('dump-log-layout', dumpLogMode);
+    applyColumnLayout();
     hexTextInput.placeholder = dumpLogMode
         ? 'ダンプログを貼り付け (区切りの正規表現でレコードに分割)'
         : 'Hexテキスト入力 (例: 01 02 0A... 入力すると自動パースされます)';

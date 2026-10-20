@@ -61,6 +61,37 @@ h1 {
   border-right: none;
 }
 
+/* 列幅変更用のつまみ（位置は columnResizer.ts がパネルの右端に合わせる） */
+.three-column-layout {
+  position: relative;
+}
+
+.column-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 10;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.column-resizer:hover,
+.column-resizer.active {
+  background-color: rgba(26, 115, 232, 0.35);
+}
+
+.column-resizer[hidden],
+.three-column-layout:not(.columns-resizable) .column-resizer {
+  display: none;
+}
+
+/* ドラッグ中は文字選択やカーソル変化を抑える */
+body.column-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
 .panel h3 {
   margin: 0;
   padding: 10px 15px;
