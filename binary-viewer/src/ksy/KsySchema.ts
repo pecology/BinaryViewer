@@ -16,8 +16,6 @@ export interface KsyMeta {
     fileExtension?: string | string[];
     /** デフォルト文字列エンコーディング */
     encoding?: string;
-    /** グループ分け用のカテゴリ名（独自拡張） */
-    category?: string;
 }
 
 /** 繰り返しの種類 */

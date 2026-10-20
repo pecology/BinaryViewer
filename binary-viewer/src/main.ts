@@ -5,6 +5,7 @@ import { saveKsy, loadKsy, deleteKsy, listKsyNames, hasKsy, exportAllKsy, import
 import { saveExtensionMapping, getParserForExtension, getExtensionFromFileName, getAllExtensionMappings, removeExtensionMapping, type ParserType } from './extensionMapping.ts'
 import { getBuiltinParsers, getBuiltinParser } from './parserRegistry.ts'
 import { setupColumnResizers, applyColumnLayout } from './columnResizer.ts'
+import { buildSchemaTree, walkSchemaTree, type SchemaTreeNode } from './schemaTree.ts'
 import type { BinaryRange } from './BinaryRange.ts'
 import type { DisplayRadix } from './BinaryInterpretType.ts'
 
@@ -212,8 +213,6 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
                         <option value="le">Little Endian (le)</option>
                         <option value="be">Big Endian (be)</option>
                     </select>
-                    <label style="font-weight: bold; font-size: 13px; margin-left: 10px;">Category:</label>
-                    <input type="text" id="ksy-gui-category" placeholder="グループ名" style="padding: 4px; flex: 1; border: 1px solid #ccc; border-radius: 4px; max-width: 150px;" />
                 </div>
                 <h4 style="margin: 0 0 8px 0; font-size: 13px; color: #333;">Fields (seq)</h4>
                 <div id="ksy-gui-fields" style="display: flex; flex-direction: column; gap: 8px;"></div>
@@ -264,50 +263,63 @@ function updateParserSelect(selectedValue?: string): void {
         </optgroup>
     `;
     
-    // 保存済みKSYスキーマ
-    const ksyNames = listKsyNames();
-    if (ksyNames.length > 0) {
-        const groups: Record<string, string[]> = {
-            'KSYスキーマ': []
-        };
-        ksyNames.forEach(name => {
-            let category = 'KSYスキーマ';
-            const content = loadKsy(name);
-            if (content) {
-                try {
-                    const schema = parseKsySchema(content);
-                    if (schema.meta && schema.meta.category) {
-                        category = schema.meta.category;
-                    }
-                } catch(e) {
-                    // パース失敗時はデフォルト
-                }
-            }
-            if (!groups[category]) {
-                groups[category] = [];
-            }
-            groups[category].push(name);
-        });
-        
-        for (const [groupName, names] of Object.entries(groups)) {
-            if (names.length > 0) {
-                html += `<optgroup label="${groupName}">`;
-                names.forEach(name => {
-                    html += `<option value="ksy:${name}">📄 ${name}</option>`;
-                });
-                html += `</optgroup>`;
-            }
-        }
-    }
-    
     select.innerHTML = html;
-    
+
+    // 保存済みKSYスキーマを、名前の「-」区切りで階層表示する。
+    // <optgroup> は入れ子にできないため、最上位の階層を <optgroup> にし、それより下はインデントで表す
+    const tree = buildSchemaTree(listKsyNames());
+    const ungrouped = tree.filter(node => node.children.length === 0);
+    if (ungrouped.length > 0) {
+        select.append(createSchemaOptgroup('KSYスキーマ', ungrouped));
+    }
+    for (const node of tree.filter(node => node.children.length > 0)) {
+        // 最上位の名前自体もスキーマの場合は、グループ内の先頭に選択肢として置く
+        const groupNodes = node.name !== undefined ? [{ label: node.label, name: node.name, children: [] }, ...node.children] : node.children;
+        select.append(createSchemaOptgroup(node.label, groupNodes));
+    }
+
     // 値を復元（存在する場合）
     if (currentValue) {
-        const option = select.querySelector<HTMLOptionElement>(`option[value="${currentValue}"]`);
+        const option = [...select.options].find(o => o.value === currentValue);
         if (option) {
             select.value = currentValue;
         }
+    }
+    syncParserOptionLabels();
+}
+
+/** 階層ツリーを <optgroup> 内の選択肢にする（途中の階層は選べない見出し行にする） */
+function createSchemaOptgroup(label: string, nodes: SchemaTreeNode[]): HTMLOptGroupElement {
+    const group = document.createElement('optgroup');
+    group.label = label;
+    walkSchemaTree(nodes, (node, depth) => {
+        const option = document.createElement('option');
+        const indent = '   '.repeat(depth);
+        if (node.name !== undefined) {
+            option.value = `ksy:${node.name}`;
+            option.title = node.name;
+            option.dataset.treeLabel = `${indent}📄 ${node.label}`;
+            option.dataset.fullLabel = `📄 ${node.name}`;
+            option.textContent = option.dataset.treeLabel;
+        } else {
+            option.value = '';
+            option.disabled = true;
+            option.textContent = `${indent}${node.label}`;
+        }
+        group.append(option);
+    });
+    return group;
+}
+
+/**
+ * 選択中のスキーマだけフルネームで表示する
+ * （閉じたプルダウンには選択肢の文字列がそのまま出るため、末尾の名前だけだとどの階層か分からない）
+ */
+function syncParserOptionLabels(): void {
+    const select = document.querySelector<HTMLSelectElement>('#parser-select')!;
+    for (const option of select.options) {
+        if (option.dataset.treeLabel === undefined) continue;
+        option.textContent = option.selected ? option.dataset.fullLabel! : option.dataset.treeLabel;
     }
 }
 
@@ -332,10 +344,23 @@ function updateKsySchemaList(): void {
         return;
     }
     
-    list.innerHTML = names.map(name => 
-        `<li class="ksy-list-item" data-name="${name}">${name}</li>`
-    ).join('');
-    
+    // 名前の「-」区切りで階層表示する（途中の階層は選べない見出し行）
+    const rows: HTMLLIElement[] = [];
+    walkSchemaTree(buildSchemaTree(names), (node, depth) => {
+        const row = document.createElement('li');
+        row.textContent = node.label;
+        row.style.paddingLeft = `${12 + depth * 14}px`;
+        if (node.name !== undefined) {
+            row.className = 'ksy-list-item';
+            row.dataset.name = node.name;
+            row.title = node.name;
+        } else {
+            row.className = 'ksy-list-group';
+        }
+        rows.push(row);
+    });
+    list.replaceChildren(...rows);
+
     // クリックでスキーマをロード
     list.querySelectorAll<HTMLLIElement>('.ksy-list-item').forEach(item => {
         item.addEventListener('click', () => {
@@ -426,7 +451,8 @@ document.querySelector<HTMLButtonElement>('#ksy-new-btn')!.addEventListener('cli
 document.querySelector<HTMLSelectElement>('#parser-select')!.addEventListener('change', (e) => {
     const select = e.target as HTMLSelectElement;
     const value = select.value;
-    
+    syncParserOptionLabels();
+
     // KSYスキーマが選択された場合、エディタにロード
     if (value.startsWith('ksy:')) {
         const ksyName = value.substring(4);
@@ -620,10 +646,11 @@ function setParser(parser: ParserType): void {
     updateParserSelect(parser);
     
     // 値が存在する場合は設定
-    const option = parserSelect.querySelector<HTMLOptionElement>(`option[value="${parser}"]`);
+    const option = [...parserSelect.options].find(o => o.value === parser);
     if (option) {
         parserSelect.value = parser;
-        
+        syncParserOptionLabels();
+
         // KSYスキーマの場合はエディタにロード
         if (parser.startsWith('ksy:')) {
             const ksyName = parser.substring(4);
@@ -1959,10 +1986,6 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                 if (guiEndianSelect && schema.meta.endian) {
                     guiEndianSelect.value = schema.meta.endian;
                 }
-                const categoryInput = document.querySelector<HTMLInputElement>('#ksy-gui-category');
-                if (categoryInput) {
-                    categoryInput.value = schema.meta.category || '';
-                }
                 
                 // フィールドの同期
                 if (schema.seq && Array.isArray(schema.seq)) {
@@ -2227,15 +2250,10 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
     (window as any).generateYamlFromGui = (silent: boolean = false): string | null => {
         const id = ksySaveNameInput?.value.trim() || 'my_format';
         const endian = guiEndianSelect?.value || 'le';
-        const categoryInput = document.querySelector<HTMLInputElement>('#ksy-gui-category');
-        const category = categoryInput?.value.trim() || '';
-        
+
         let yaml = `meta:
   id: ${id}
   endian: ${endian}`;
-        if (category) {
-            yaml += `\n  category: ${category}`;
-        }
         yaml += `\nseq:\n`;
 
         const rows = Array.from(guiFieldsContainer.children);

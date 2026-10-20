@@ -125,7 +125,6 @@ function convertToKsySchema(obj: YamlObject): KsySchema {
             endian: parseEndian(meta['endian']),
             encoding: typeof meta['encoding'] === 'string' ? meta['encoding'] : undefined,
             fileExtension: meta['file-extension'] as string | string[] | undefined,
-            category: typeof meta['category'] === 'string' ? meta['category'] : undefined,
         },
         seq: fields.map(convertToKsyField),
         doc: typeof obj['doc'] === 'string' ? obj['doc'] : undefined,

@@ -1267,6 +1267,14 @@ thead th {
   color: #1a73e8;
 }
 
+/* スキーマ名の階層の見出し（選択不可） */
+.ksy-list-group {
+  padding: 6px 12px 2px;
+  color: #888;
+  font-size: 12px;
+  font-weight: bold;
+}
+
 .ksy-list-empty {
   padding: 16px;
   color: #999;
