@@ -43,3 +43,13 @@ GeneralPurposeBitFlagによってはファイル名をUTF8で解釈する必要�
 [ ] スキーマ保存などの完了通知が alert() でブロッキングになる。トースト表示にしたい
 [ ] main.ts が約2300行。ダンプログ・KSY管理モーダル・Hexテーブルなどをモジュールに分割したい
 [ ] Hexテーブルは幅が狭いと列が切れて横スクロールが必要になる
+
+[ ] KSY: if 条件を new Function で評価しているため、共有・インポートしたスキーマから任意の JS が実行できる。式の評価器を自前で実装したい
+[ ] ZIP: CRC32・サイズ・長さなどの符号なしフィールドを Int16LE/Int32LE（符号付き）で表示しており、0x8000 / 0x80000000 以上が負数になる
+[ ] ZIP: Data Descriptor 使用時は圧縮データ中の "PK\x01/03/05/07" を探してサイズを推定するため、データ中に偶然現れると誤パースする。セントラルディレクトリのサイズを使いたい
+[ ] Text Parser: 1文字ごとに BinaryRange と <details> を作るため、大きなテキストでは構造ツリーの生成とクリック時のハイライトが非常に重い
+[ ] Hexクリック時、全 td・全 details を走査してハイライトしている（O(N)）。details を offset+length で探すため、同じ範囲のノードが入れ子だと外側しか開かない
+[ ] BinaryRange のオフセットが data.byteOffset 頼みで、「ルートが ArrayBuffer の先頭（byteOffset 0）」という暗黙の前提がある
+[ ] KSY 式: size / repeat-expr に数値かフィールド名しか書けない（length - 2 などの算術、_parent / _root は不可）
+[ ] テストがない。パーサー（ZIP・Text・KSY）は純粋関数なので、vitest などで単体テストを書きやすい
+[ ] counter.ts が未使用（Vite テンプレートの残骸）
