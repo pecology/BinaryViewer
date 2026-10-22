@@ -991,24 +991,24 @@ details > details {
 }
 
 *[data-highlight="4"] {
-  background-color: #e8f5e9;
+  background-color: #df8a8a;
 }
 .details-wrapper details[data-highlight="4"] > summary {
-  background-color: #e8f5e9 !important;
+  background-color: #df8a8a !important;
 }
 
 *[data-highlight="5"] {
-  background-color: #c8e6c9;
+  background-color: #cf7c7c;
 }
 .details-wrapper details[data-highlight="5"] > summary {
-  background-color: #c8e6c9 !important;
+  background-color: #cf7c7c !important;
 }
 
 *[data-highlight="6"] {
-  background-color: #e3f2fd;
+  background-color: #bf6f6f;
 }
 .details-wrapper details[data-highlight="6"] > summary {
-  background-color: #e3f2fd !important;
+  background-color: #bf6f6f !important;
 }
 
 *[data-highlight="7"] {
