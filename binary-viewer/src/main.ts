@@ -1,8 +1,8 @@
 import './style.css'
 import { parseKsySchema, parseBinary } from './ksy/DynamicParser.ts'
 import { convertSchemaTextToCsv, convertSchemaTextToYaml } from './ksy/CsvSchema.ts'
-import { saveKsy, loadKsy, deleteKsy, listKsyNames, hasKsy, exportAllKsy, importKsy } from './ksyStorage.ts'
-import { saveExtensionMapping, getParserForExtension, getExtensionFromFileName, getAllExtensionMappings, removeExtensionMapping, type ParserType } from './extensionMapping.ts'
+import { saveKsy, loadKsy, deleteKsy, listKsyNames, hasKsy, exportAllKsy, importKsy, renameKsy } from './ksyStorage.ts'
+import { saveExtensionMapping, getParserForExtension, getExtensionFromFileName, getAllExtensionMappings, removeExtensionMapping, replaceParserInMappings, type ParserType } from './extensionMapping.ts'
 import { getBuiltinParsers, getBuiltinParser } from './parserRegistry.ts'
 import { setupColumnResizers, applyColumnLayout } from './columnResizer.ts'
 import { buildSchemaTree, walkSchemaTree, type SchemaTreeNode } from './schemaTree.ts'
@@ -353,7 +353,18 @@ function updateKsySchemaList(): void {
         if (node.name !== undefined) {
             row.className = 'ksy-list-item';
             row.dataset.name = node.name;
-            row.title = node.name;
+            row.title = `${node.name}（ダブルクリックまたは F2 で名前を変更）`;
+            // クリックでフォーカスを受け取れるようにし、F2 で名前変更できるようにする
+            row.tabIndex = 0;
+            const editingName = document.querySelector<HTMLInputElement>('#ksy-save-name')!.value.trim();
+            row.classList.toggle('selected', node.name === editingName);
+            row.addEventListener('dblclick', () => startSchemaRename(row));
+            row.addEventListener('keydown', (e) => {
+                if (e.key === 'F2') {
+                    e.preventDefault();
+                    startSchemaRename(row);
+                }
+            });
         } else {
             row.className = 'ksy-list-group';
         }
@@ -402,6 +413,84 @@ function updateKsySchemaList(): void {
             }
         });
     });
+}
+
+/**
+ * スキーマ一覧の行をその場で名前変更できる入力欄にする
+ * Enter またはフォーカスが外れたときに確定、Esc で取り消し。入力欄には「-」区切りのフルネームを出す
+ */
+function startSchemaRename(row: HTMLLIElement): void {
+    const oldName = row.dataset.name!;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'ksy-list-rename-input';
+    input.value = oldName;
+    input.setAttribute('aria-label', 'スキーマの新しい名前');
+    row.replaceChildren(input);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const finish = (commit: boolean) => {
+        if (finished) return;
+        finished = true;
+        const newName = input.value.trim();
+        const renamed = commit && newName !== oldName && renameSchema(oldName, newName);
+        updateKsySchemaList();
+        // 続けて F2 などのキー操作ができるよう、編集していた行にフォーカスを戻す
+        const name = renamed ? newName : oldName;
+        [...document.querySelectorAll<HTMLLIElement>('#ksy-schema-list .ksy-list-item')]
+            .find(item => item.dataset.name === name)
+            ?.focus();
+    };
+
+    input.addEventListener('keydown', (e) => {
+        // モーダルを閉じる Esc などに伝わらないようにする
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            finish(true);
+        } else if (e.key === 'Escape') {
+            finish(false);
+        }
+    });
+    input.addEventListener('blur', () => finish(true));
+    // 入力欄のクリックで行のクリック（スキーマの読み込み）が起きないようにする
+    input.addEventListener('click', e => e.stopPropagation());
+    input.addEventListener('dblclick', e => e.stopPropagation());
+}
+
+/**
+ * スキーマ名を変更し、拡張子の紐付け・エディタ・パーサー選択も新しい名前に合わせる
+ * @returns 変更できたかどうか
+ */
+function renameSchema(oldName: string, newName: string): boolean {
+    const result = renameKsy(oldName, newName);
+    if (!result.success) {
+        alert(`名前を変更できませんでした: ${result.error}`);
+        return false;
+    }
+
+    replaceParserInMappings(`ksy:${oldName}`, `ksy:${newName}`);
+    updateExtMappingInfo();
+    updateExtMappingList();
+
+    const saveNameInput = document.querySelector<HTMLInputElement>('#ksy-save-name')!;
+    if (saveNameInput.value.trim() === oldName) {
+        saveNameInput.value = newName;
+    }
+
+    const parserSelect = document.querySelector<HTMLSelectElement>('#parser-select')!;
+    updateParserSelect(parserSelect.value === `ksy:${oldName}` ? `ksy:${newName}` : undefined);
+
+    // 他のスキーマが「type: 旧名」で参照している場合は、参照が切れることを知らせる（自動では書き換えない）
+    const escapedOldName = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const typeReference = new RegExp(`^\\s*(?:-\\s*)?type:\\s*["']?${escapedOldName}["']?\\s*$`, 'm');
+    const referencingNames = listKsyNames().filter(name => typeReference.test(loadKsy(name) ?? ''));
+    if (referencingNames.length > 0) {
+        alert(`次のスキーマが "${oldName}" を型として参照しています。必要に応じて「type: ${newName}」に書き換えてください。\n\n${referencingNames.join('\n')}`);
+    }
+    return true;
 }
 
 /** モーダルを開く */

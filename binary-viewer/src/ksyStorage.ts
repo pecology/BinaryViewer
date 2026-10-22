@@ -66,6 +66,27 @@ export function listKsyNames(): string[] {
 }
 
 /**
+ * KSYスキーマの名前を変更（変更先に同名のスキーマがある場合は上書きせずエラーにする）
+ */
+export function renameKsy(oldName: string, newName: string): SaveResult {
+    if (!newName) {
+        return { success: false, error: 'スキーマ名を入力してください' };
+    }
+    const content = loadKsy(oldName);
+    if (content === null) {
+        return { success: false, error: `"${oldName}" は保存されていません` };
+    }
+    if (hasKsy(newName)) {
+        return { success: false, error: `"${newName}" は既に存在します` };
+    }
+    const result = saveKsy(newName, content);
+    if (result.success) {
+        deleteKsy(oldName);
+    }
+    return result;
+}
+
+/**
  * KSYスキーマが存在するか確認
  */
 export function hasKsy(name: string): boolean {

@@ -58,6 +58,21 @@ export function getAllExtensionMappings(): Record<string, ParserType> {
 }
 
 /**
+ * 指定したパーサーに紐づいている拡張子を、別のパーサーに付け替える（パーサー名の変更時に使う）
+ * @returns 付け替えた拡張子の数
+ */
+export function replaceParserInMappings(oldParser: ParserType, newParser: ParserType): number {
+  let count = 0;
+  for (const [ext, parser] of Object.entries(getAllExtensionMappings())) {
+    if (parser === oldParser) {
+      localStorage.setItem(STORAGE_PREFIX + ext, newParser);
+      count++;
+    }
+  }
+  return count;
+}
+
+/**
  * ファイル名から拡張子を抽出
  * @param fileName ファイル名
  * @returns 拡張子（小文字、ドット付き）例: '.png'

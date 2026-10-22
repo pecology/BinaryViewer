@@ -1267,6 +1267,16 @@ thead th {
   color: #1a73e8;
 }
 
+/* スキーマ名のその場編集 */
+.ksy-list-rename-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 2px 4px;
+  border: 1px solid #1a73e8;
+  border-radius: 3px;
+  font: inherit;
+}
+
 /* スキーマ名の階層の見出し（選択不可） */
 .ksy-list-group {
   padding: 6px 12px 2px;
