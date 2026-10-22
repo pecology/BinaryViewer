@@ -588,6 +588,7 @@ showDocCheckbox.checked = (() => {
 structureWrapper.classList.toggle('hide-structure-doc', !showDocCheckbox.checked);
 showDocCheckbox.addEventListener('change', () => {
     structureWrapper.classList.toggle('hide-structure-doc', !showDocCheckbox.checked);
+    scheduleStickySummaryOffsets();
     try {
         localStorage.setItem(SHOW_DOC_STORAGE_KEY, String(showDocCheckbox.checked));
     } catch {
@@ -634,6 +635,7 @@ valueRadixSelect.addEventListener('change', () => {
     const accordionState = saveAccordionState();
     const scrollTop = wrapper.scrollTop;
     wrapper.innerHTML = toStructureHtmlString(currentParseResult);
+    scheduleStickySummaryOffsets();
     restoreAccordionState(accordionState);
     wrapper.scrollTop = scrollTop;
     updateStructureSearch();
@@ -1560,6 +1562,7 @@ function displayParseResult(parseResult: BinaryRange): void {
     document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(parseResult);
 
     document.querySelector<HTMLDivElement>('.details-wrapper')!.innerHTML = toStructureHtmlString(parseResult);
+    scheduleStickySummaryOffsets();
     updateStructureSearch();
 
     document.querySelector<HTMLElement>('#paging-index-input')!.addEventListener('input', (e) => {
@@ -1684,8 +1687,49 @@ function displayParseResult(parseResult: BinaryRange): void {
 
 // 構造ツリーのクリックイベントハンドラ（初期化時に一度だけ登録）
 // 構造ツリーは表示形式の切り替えなどで描き直すため、ツリー自体ではなく外側の .details-wrapper に登録する
+/** 構造ツリーで、スクロールしても上に固定表示する親の段数 */
+const STICKY_SUMMARY_LEVELS = 4;
+let stickySummaryTimer: number | null = null;
+
+/**
+ * 固定表示（position: sticky）する項目名の行の top を、親の行の実際の高さから計算して設定する
+ * 行の高さは説明の有無や折り返しで変わるため、CSS の固定値ではなく実測で積み上げる
+ */
+function updateStickySummaryOffsets(): void {
+    const place = (details: HTMLDetailsElement, depth: number, top: number): void => {
+        const summary = details.querySelector<HTMLElement>(':scope > summary');
+        if (!summary) return;
+        summary.style.top = `${top}px`;
+        if (!details.open || depth + 1 >= STICKY_SUMMARY_LEVELS) return;
+        const childTop = top + summary.offsetHeight;
+        details.querySelectorAll<HTMLDetailsElement>(':scope > details').forEach(child => place(child, depth + 1, childTop));
+    };
+    const wrapper = document.querySelector<HTMLElement>('.details-wrapper')!;
+    // sticky の top は余白（padding）の内側から測られるので、余白の分だけ上にずらして表示領域の上端にぴったり付ける
+    // （ずらさないと、上端の余白に下の行が透けて見える）
+    const baseTop = -parseFloat(getComputedStyle(wrapper).paddingTop) || 0;
+    wrapper.querySelectorAll<HTMLDetailsElement>(':scope > details').forEach(details => place(details, 0, baseTop));
+}
+
+/**
+ * 固定表示の位置の再計算を、少し後に1回だけ行う（全開などで開閉が大量に起きても1回にまとめる）
+ * requestAnimationFrame は画面が描画されない間は止まるため、setTimeout を使う
+ */
+function scheduleStickySummaryOffsets(): void {
+    if (stickySummaryTimer !== null) return;
+    stickySummaryTimer = window.setTimeout(() => {
+        stickySummaryTimer = null;
+        updateStickySummaryOffsets();
+    }, 0);
+}
+
 function setupStructureEventListeners(): void {
-    document.querySelector<HTMLElement>('.details-wrapper')!.addEventListener('click', (e) => {
+    const structureWrapper = document.querySelector<HTMLElement>('.details-wrapper')!;
+    // 開閉（toggle はバブリングしないのでキャプチャで受ける）や幅の変化で行の位置・高さが変わるので再計算する
+    structureWrapper.addEventListener('toggle', scheduleStickySummaryOffsets, true);
+    new ResizeObserver(scheduleStickySummaryOffsets).observe(structureWrapper);
+
+    structureWrapper.addEventListener('click', (e) => {
         if ((e.target as HTMLElement).classList.contains("cancel-toggle")) {
             // detailsの開閉の動作をキャンセルしたい
             e.preventDefault();
