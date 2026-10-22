@@ -6,6 +6,7 @@ import { saveExtensionMapping, getParserForExtension, getExtensionFromFileName, 
 import { getBuiltinParsers, getBuiltinParser } from './parserRegistry.ts'
 import { setupColumnResizers, applyColumnLayout } from './columnResizer.ts'
 import { buildSchemaTree, walkSchemaTree, type SchemaTreeNode } from './schemaTree.ts'
+import { attachTooltip } from './tooltip.ts'
 import type { BinaryRange } from './BinaryRange.ts'
 import type { DisplayRadix } from './BinaryInterpretType.ts'
 
@@ -163,7 +164,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div>
     </div>
     <div class="panel structure-panel" data-column="structure">
-            <h3>構造 <span class="structure-controls"><input id="structure-search-input" type="search" placeholder="構造を検索" aria-label="構造を検索"><select id="value-radix-select" title="整数・バイト列の表示形式" aria-label="値の表示形式"><option value="auto">既定</option><option value="10">10進</option><option value="16">16進</option></select><button id="expand-all-btn" title="全て開く">▼ 全開</button><button id="collapse-all-btn" title="全て閉じる">▶ 全閉</button></span></h3>
+            <h3>構造 <span class="structure-controls"><input id="structure-search-input" type="search" placeholder="構造を検索" aria-label="構造を検索"><label class="structure-doc-toggle" title="各項目の説明を項目名の下に表示"><input type="checkbox" id="show-doc-checkbox"> 説明</label><select id="value-radix-select" title="整数・バイト列の表示形式" aria-label="値の表示形式"><option value="auto">既定</option><option value="10">10進</option><option value="16">16進</option></select><button id="expand-all-btn" title="全て開く">▼ 全開</button><button id="collapse-all-btn" title="全て閉じる">▶ 全閉</button></span></h3>
       <div class="details-wrapper"></div>
     </div>
   </div>
@@ -571,6 +572,50 @@ structureSearchInput.addEventListener('keydown', (e) => {
             .querySelector<HTMLElement>(':scope > summary .cancel-toggle')
             ?.click();
     }
+});
+
+// 構造ツリーで説明（doc）を項目名の下に表示するか。CSS のクラスで切り替えるだけなので描き直しは不要
+const SHOW_DOC_STORAGE_KEY = 'display:show-doc';
+const structureWrapper = document.querySelector<HTMLDivElement>('.details-wrapper')!;
+const showDocCheckbox = document.querySelector<HTMLInputElement>('#show-doc-checkbox')!;
+showDocCheckbox.checked = (() => {
+    try {
+        return localStorage.getItem(SHOW_DOC_STORAGE_KEY) !== 'false';
+    } catch {
+        return true;
+    }
+})();
+structureWrapper.classList.toggle('hide-structure-doc', !showDocCheckbox.checked);
+showDocCheckbox.addEventListener('change', () => {
+    structureWrapper.classList.toggle('hide-structure-doc', !showDocCheckbox.checked);
+    try {
+        localStorage.setItem(SHOW_DOC_STORAGE_KEY, String(showDocCheckbox.checked));
+    } catch {
+        // 保存できなくても、このページを開いている間は切り替えが有効
+    }
+});
+
+// 構造ツリーのツールチップ: 説明を非表示にしているときだけ、項目名の行に説明を出す
+attachTooltip(structureWrapper, (target) => {
+    if (showDocCheckbox.checked) return null;
+    const summary = target.closest('summary');
+    const doc = summary?.querySelector('.structure-doc')?.textContent;
+    const details = summary?.parentElement;
+    if (!summary || !doc || !details?.dataset.name) return null;
+    return { anchor: summary, content: { title: decodeURIComponent(details.dataset.name), body: doc } };
+});
+
+// Hexテーブルのツールチップ: セルに乗せると、そのバイトを含む一番内側の項目の名前・値・説明を出す
+attachTooltip(document.querySelector<HTMLElement>('#hex-table')!, (target) => {
+    const cell = target.closest<HTMLTableCellElement>('td[data-offset]');
+    if (!cell || !currentParseResult || cell.querySelector('input')) return null;
+    const ranges = getRangeContainsList(currentParseResult, parseInt(cell.dataset.offset!));
+    // 先頭はファイル全体なので除く
+    const deepest = ranges.length > 1 ? ranges[ranges.length - 1] : null;
+    if (!deepest) return null;
+    const value = deepest.interpret({ radix: valueRadix });
+    const body = [value && `値: ${value}`, deepest.doc].filter(Boolean).join('\n\n');
+    return { anchor: cell, content: { title: deepest.name, body } };
 });
 
 // 値の表示形式（既定 / 10進 / 16進）の切り替え。再パースはせず構造ツリーだけ描き直す
@@ -1635,16 +1680,20 @@ function displayParseResult(parseResult: BinaryRange): void {
             }
         }, 50);
     });
+}
 
-    document.querySelector<HTMLElement>('.details-wrapper > details')!.addEventListener('click', (e) => {
-        console.log(e.target);
+// 構造ツリーのクリックイベントハンドラ（初期化時に一度だけ登録）
+// 構造ツリーは表示形式の切り替えなどで描き直すため、ツリー自体ではなく外側の .details-wrapper に登録する
+function setupStructureEventListeners(): void {
+    document.querySelector<HTMLElement>('.details-wrapper')!.addEventListener('click', (e) => {
         if ((e.target as HTMLElement).classList.contains("cancel-toggle")) {
             // detailsの開閉の動作をキャンセルしたい
             e.preventDefault();
         }
 
         // クリックしたRangeに対応するTableの方の色付けをしたい
-        let detailsElement = (e.target as HTMLElement).closest("[data-offset]") as HTMLElement;
+        const detailsElement = (e.target as HTMLElement).closest<HTMLElement>('[data-offset]');
+        if (!detailsElement || !currentParseResult) return;
 
         const offset = parseInt(detailsElement.dataset.offset!);
         const length = parseInt(detailsElement.dataset.length!);
@@ -1653,13 +1702,13 @@ function displayParseResult(parseResult: BinaryRange): void {
         const clickedElementIndex = Math.floor(offset / bytesPerPage);
         if (nowPagingIndex !== clickedElementIndex)
         {
-            document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(parseResult, clickedElementIndex);
+            document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(currentParseResult, clickedElementIndex);
             document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${clickedElementIndex * bytesPerPage} ~ ${(clickedElementIndex + 1) * bytesPerPage - 1}byte)`
             document.querySelector<HTMLInputElement>('#paging-index-input')!.value = clickedElementIndex.toString();
         }
 
         // ハイライト対象のRangeを取得
-        const highlightRangeList: BinaryRange[] = getRangeContainsList(parseResult, offset, length);
+        const highlightRangeList: BinaryRange[] = getRangeContainsList(currentParseResult, offset, length);
         highlightRangeList.shift(); // 最初の要素は全体なので削除
 
         // 色付け処理
@@ -1878,8 +1927,9 @@ const getRangeContainsList = (range: BinaryRange, offset: number, length: number
         )
         : [];
 
-// 初期化時にHexテーブルのイベントリスナーを登録
+// 初期化時にHexテーブルと構造ツリーのイベントリスナーを登録
 setupHexTableEventListeners();
+setupStructureEventListeners();
 
 
 const highlight = (element: HTMLElement, highlightRangeList: BinaryRange[]) => {
@@ -1892,18 +1942,7 @@ const highlight = (element: HTMLElement, highlightRangeList: BinaryRange[]) => {
         : 1;
 
     const matchingRanges = highlightRangeList.filter(range => range.contains(offset, length));
-    const highlightCount = matchingRanges.length;
-    element.dataset.highlight = highlightCount.toString();
-    
-    // Hexのセル（TD要素）にツールチップを設定
-    if (element.tagName === 'TD' && highlightCount > 0) {
-        const deepestRange = matchingRanges[matchingRanges.length - 1];
-        let titleText = deepestRange.name;
-        if (deepestRange.doc) {
-            titleText += `\n\n${deepestRange.doc}`;
-        }
-        element.title = titleText;
-    }
+    element.dataset.highlight = matchingRanges.length.toString();
 }
 
 // XSS対策: HTMLエスケープ関数
@@ -1947,10 +1986,11 @@ const toHexTableHtmlString = (hexRange: BinaryRange, pageIndex: number = 0): str
 }
 
 const toStructureHtmlString = (segment: BinaryRange): string => {
-    const titleAttr = segment.doc ? ` title="${escapeHtml(segment.doc)}"` : '';
+    // 説明は <summary> の中に置き、折りたたんでいても見えるようにする（表示/非表示は CSS のクラスで切り替える）
+    const docHtml = segment.doc ? `<span class="structure-doc">${escapeHtml(segment.doc)}</span>` : '';
     return `
-<details data-name="${encodeURIComponent(segment.name)}" data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0"${titleAttr}>
-  <summary><span class="cancel-toggle"> ${escapeHtml(segment.name)} (${rangeToString(segment)})</span></summary>
+<details data-name="${encodeURIComponent(segment.name)}" data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0">
+  <summary><span class="cancel-toggle"> ${escapeHtml(segment.name)} (${rangeToString(segment)})</span>${docHtml}</summary>
     ${escapeHtml(segment.interpret({ radix: valueRadix }))}
     ${segment.subRanges.reduce((acc, child) => acc + toStructureHtmlString(child), "")}
 </details>

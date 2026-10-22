@@ -411,6 +411,61 @@ body.column-resizing {
   font-size: 11px;
 }
 
+.structure-doc-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: #666;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* 構造ツリーの説明（項目名の下に表示） */
+.structure-doc {
+  display: block;
+  margin: 2px 0 2px 14px;
+  padding-left: 8px;
+  border-left: 2px solid #ccc;
+  color: #666;
+  font-size: 11px;
+  font-weight: normal;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.hide-structure-doc .structure-doc {
+  display: none;
+}
+
+/* 独自ツールチップ（tooltip.ts） */
+.app-tooltip {
+  position: fixed;
+  z-index: 2000;
+  max-width: 360px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: #333;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+.app-tooltip[hidden] {
+  display: none;
+}
+
+.app-tooltip-title {
+  font-weight: bold;
+}
+
+.app-tooltip-body {
+  margin-top: 2px;
+  color: #ddd;
+  white-space: pre-wrap;
+}
+
 .structure-controls select {
   padding: 1px 2px;
   border: 1px solid #ccc;
