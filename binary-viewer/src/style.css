@@ -1059,6 +1059,54 @@ thead th {
   min-height: 400px;
 }
 
+/*
+ * パーサー管理ダイアログは高さを固定し、スキーマ一覧やエディタの量で縦幅が変わらないようにする。
+ * はみ出す分は、スキーマ一覧・YAMLエディタ・GUIビルダーそれぞれの中でスクロールする
+ */
+#ksy-modal .modal-content {
+  height: 90vh;
+}
+
+#ksy-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#ksy-modal .ksy-modal-layout {
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+#ksy-modal .ksy-list-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#ksy-modal .ksy-schema-list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+#ksy-modal .ksy-edit-panel {
+  min-height: 0;
+}
+
+#ksy-modal #ksy-raw-editor,
+#ksy-modal #ksy-gui-editor {
+  min-height: 0;
+}
+
+#ksy-modal #ksyText {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+}
+
 .gui-field-row {
   min-width: 0;
   width: 100%;
