@@ -389,7 +389,10 @@ function updateKsySchemaList(): void {
             // 別のスキーマをクリックした場合、編集中の内容があるか確認
             if (currentName !== name && currentContent.trim() !== '') {
                 const originalContent = currentName ? loadKsy(currentName) : null;
-                const hasChanges = originalContent !== currentContent;
+                // GUIビルダーでの編集はテキストエリアに出ないので、GUI側の変更も確認する
+                // 保存時は前後の空白を除いて保存するため、比較も前後の空白を除いて行う
+                const hasChanges = originalContent?.trim() !== currentContent.trim()
+                    || (typeof (window as any).hasUnsavedGuiChanges === 'function' && (window as any).hasUnsavedGuiChanges());
                 
                 if (hasChanges) {
                     if (!confirm(`「${currentName || '新規スキーマ'}」の変更内容が失われます。破棄してよろしいですか？`)) {
@@ -922,7 +925,9 @@ document.querySelector<HTMLButtonElement>('#ksy-save-btn')!.addEventListener('cl
     
     // もしGUIタブが開かれていたら、先にYAMLに変換する
     const tabGui = document.querySelector<HTMLButtonElement>('#ksy-tab-gui');
-    if (tabGui && tabGui.classList.contains('active') && typeof (window as any).generateYamlFromGui === 'function') {
+    // GUIビルダーで変更したときだけGUIからYAMLを作り直す（変更がなければ元のYAMLをそのまま保存する）
+    if (tabGui && tabGui.classList.contains('active') && typeof (window as any).generateYamlFromGui === 'function'
+        && (window as any).hasUnsavedGuiChanges()) {
         const yaml = (window as any).generateYamlFromGui();
         if (yaml === null) return; // エラー時は中断
         textArea.value = yaml;
@@ -945,6 +950,10 @@ document.querySelector<HTMLButtonElement>('#ksy-save-btn')!.addEventListener('cl
     
     const result = saveKsy(name, content);
     if (result.success) {
+        // GUIビルダー表示中なら、保存した内容をGUIの基準にし直す（保存後は未変更として扱う）
+        if (tabGui && tabGui.classList.contains('active') && typeof (window as any).syncYamlToGui === 'function') {
+            (window as any).syncYamlToGui();
+        }
         updateParserSelect(`ksy:${name}`);
         updateKsySchemaList();
         // 保存したスキーマを選択状態に
@@ -2041,8 +2050,8 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
     // タブ切り替え
     tabRaw.addEventListener('click', () => {
         if (tabRaw.classList.contains('active')) return;
-        // GUIからYAMLへ同期
-        if (typeof (window as any).generateYamlFromGui === 'function') {
+        // GUIからYAMLへ同期（GUIで変更したときだけ。見ただけなら元のYAMLの書式や meta をそのまま残す）
+        if (typeof (window as any).generateYamlFromGui === 'function' && (window as any).hasUnsavedGuiChanges()) {
             const yaml = (window as any).generateYamlFromGui(true); // silent = true
             if (yaml !== null) {
                 ksyTextArea!.value = yaml;
@@ -2064,6 +2073,13 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
     // GUIビルダーには meta.id の入力欄がないため、YAMLの meta.id を覚えておき、YAMLへ戻すときにそのまま書き出す
     // （スキーマ名の欄は保存先の名前なので、meta.id で上書きしない）
     let guiMetaId: string | null = null;
+    // GUIビルダーでの編集はYAMLのテキストエリアに反映されないため、
+    // YAMLからGUIを作った時点の「GUIから生成したYAML」を覚えておき、未保存の変更があるかの判定に使う
+    let guiBaselineYaml: string | null = null;
+
+    /** GUIビルダー表示中に、YAMLから同期した時点から変更があるか */
+    (window as any).hasUnsavedGuiChanges = (): boolean =>
+        tabGui.classList.contains('active') && (window as any).generateYamlFromGui(true) !== guiBaselineYaml;
 
     (window as any).syncYamlToGui = () => {
         // YAMLからGUIへ同期
@@ -2152,7 +2168,8 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                 <option value="bytes">バイト配列</option>
                 ${customSchemas.map(name => `<option value="${name}">保存済みスキーマ</option>`).join('')}
             `;
-            
+
+            guiBaselineYaml = (window as any).generateYamlFromGui(true);
         } catch (e) {
             if (!confirm('YAMLのパースエラーがあるため、GUIに正しく同期できません。このままGUIを開きますか？\\nエラー: ' + (e instanceof Error ? e.message : String(e)))) {
                 return;
