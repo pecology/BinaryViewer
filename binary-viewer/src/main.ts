@@ -2061,17 +2061,20 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
         guiEditor.style.display = 'none';
     });
 
+    // GUIビルダーには meta.id の入力欄がないため、YAMLの meta.id を覚えておき、YAMLへ戻すときにそのまま書き出す
+    // （スキーマ名の欄は保存先の名前なので、meta.id で上書きしない）
+    let guiMetaId: string | null = null;
+
     (window as any).syncYamlToGui = () => {
         // YAMLからGUIへ同期
+        guiMetaId = null;
         try {
             const yamlText = ksyTextArea!.value.trim();
             if (yamlText) {
                 const schema = parseKsySchema(yamlText);
-                
+
                 // メタ情報の同期
-                if (ksySaveNameInput && schema.meta.id) {
-                    ksySaveNameInput.value = schema.meta.id;
-                }
+                guiMetaId = schema.meta.id || null;
                 if (guiEndianSelect && schema.meta.endian) {
                     guiEndianSelect.value = schema.meta.endian;
                 }
@@ -2291,6 +2294,8 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                         <input type="checkbox" class="field-consume" checked />
                         consume
                     </label>
+                    <button type="button" class="field-move-btn field-move-up" title="上へ移動 (Alt+↑)" aria-label="フィールドを上へ移動">▲</button>
+                    <button type="button" class="field-move-btn field-move-down" title="下へ移動 (Alt+↓)" aria-label="フィールドを下へ移動">▼</button>
                     <button class="field-delete-btn" style="padding: 4px 8px; background: #ffebee; color: #d32f2f; border: 1px solid #ffcdd2; border-radius: 4px; cursor: pointer;">✕</button>
                 </div>
                 <div class="field-doc-control">
@@ -2324,7 +2329,49 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
             row.remove();
         });
 
+        // 上下移動（▲▼ボタン、または行内で Alt+↑ / Alt+↓）
+        row.querySelector('.field-move-up')!.addEventListener('click', () => moveGuiFieldRow(row, -1));
+        row.querySelector('.field-move-down')!.addEventListener('click', () => moveGuiFieldRow(row, 1));
+        row.addEventListener('keydown', (e) => {
+            if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+            // 型の入力欄で Alt+↓ が候補一覧を開くなど、既定の動作を止める
+            e.preventDefault();
+            moveGuiFieldRow(row, e.key === 'ArrowUp' ? -1 : 1);
+        });
+
         return row;
+    };
+
+    /**
+     * フィールドの行を1つ上（-1）または下（1）と入れ替える
+     * 要素を移動するとフォーカスが外れるので、移動前にフォーカスしていた入力欄（とカーソル位置）に戻す
+     */
+    const moveGuiFieldRow = (row: HTMLDivElement, direction: -1 | 1): void => {
+        const sibling = direction < 0 ? row.previousElementSibling : row.nextElementSibling;
+        if (!sibling) return;
+
+        const focused = document.activeElement;
+        const focusedInRow = focused instanceof HTMLElement && row.contains(focused) ? focused : null;
+        const selection = focusedInRow instanceof HTMLInputElement || focusedInRow instanceof HTMLTextAreaElement
+            ? [focusedInRow.selectionStart, focusedInRow.selectionEnd] as const
+            : null;
+
+        if (direction < 0) {
+            sibling.before(row);
+        } else {
+            sibling.after(row);
+        }
+
+        if (focusedInRow) {
+            focusedInRow.focus();
+            if (selection && (focusedInRow instanceof HTMLInputElement || focusedInRow instanceof HTMLTextAreaElement)) {
+                try {
+                    focusedInRow.setSelectionRange(selection[0], selection[1]);
+                } catch {
+                    // checkbox など選択範囲を持たない入力欄は無視する
+                }
+            }
+        }
     };
 
     // 初期フィールドを1つ追加
@@ -2337,7 +2384,7 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
 
     // GUIからYAMLを生成する関数（グローバルにエクスポートして保存ボタンからも呼べるようにする）
     (window as any).generateYamlFromGui = (silent: boolean = false): string | null => {
-        const id = ksySaveNameInput?.value.trim() || 'my_format';
+        const id = guiMetaId || ksySaveNameInput?.value.trim() || 'my_format';
         const endian = guiEndianSelect?.value || 'le';
 
         let yaml = `meta:

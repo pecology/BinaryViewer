@@ -1140,6 +1140,31 @@ thead th {
   flex: 0 0 auto !important;
 }
 
+/* フィールドの上下移動ボタン */
+.gui-field-row .field-move-btn {
+  flex: 0 0 auto;
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  color: #666;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.gui-field-row .field-move-btn:hover {
+  border-color: #1a73e8;
+  color: #1a73e8;
+}
+
+/* 先頭の行の▲、末尾の行の▼は動かせないので薄く表示する */
+.gui-field-row:first-child .field-move-up,
+.gui-field-row:last-child .field-move-down {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+
 .gui-field-row .field-doc {
   font-size: 11px;
 }
