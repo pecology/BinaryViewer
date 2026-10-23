@@ -64,3 +64,4 @@ GeneralPurposeBitFlagによってはファイル名をUTF8で解釈する必要�
 [ ] KSY: 構造ツリーに出す文字列（createStringInterpretType）は encoding の名前をそのまま TextDecoder に渡すため、読み取り側（primitives.ts の getTextDecoderEncoding）では通る shiftjis・eucjp などの表記だと表示だけバイト列になる。同じ変換を通したい
 [ ] KSY: 保存済みスキーマを型として使うとき、エンディアンは参照先の meta.endian に切り替えるが、meta.encoding は切り替えない（参照先の文字列が参照元の文字コードで読まれる）
 [ ] KSY: 型がユーザー定義型・保存済みスキーマのフィールドは、構造ツリーの説明に型側の doc を使い、フィールドに書いた doc が表示されない（フィールドの doc を優先したい）
+[ ] 構造ツリーのキー操作: ↑ は同じ階層の前の項目（なければ親）へ移るため、前の項目が開いていてもその中の最後の行には移らない（↓ と対称でない）。エクスプローラーのように「見えている1つ上の行」へ移したい
