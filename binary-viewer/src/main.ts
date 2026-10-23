@@ -183,6 +183,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
             <ul id="ksy-schema-list" class="ksy-schema-list"></ul>
                         <button id="ksy-new-btn" class="ksy-new-btn" type="button">+ 新規作成</button>
           </div>
+          <div id="ksy-list-resizer" class="ksy-list-resizer" title="ドラッグで幅を変更（ダブルクリックで元に戻す）"></div>
           <div class="ksy-edit-panel">
             <div class="ksy-edit-header">
               <input type="text" id="ksy-save-name" placeholder="スキーマ名" />
@@ -339,6 +340,71 @@ updateParserSelect();
 
 // KSYモーダル関連
 const ksyModal = document.querySelector<HTMLDivElement>('#ksy-modal')!;
+
+// パーサー管理の「保存済みスキーマ」列の幅をドラッグで変更する（幅は localStorage に保存、ダブルクリックで既定に戻す）
+const KSY_LIST_WIDTH_STORAGE_KEY = 'layout:ksy-list-width';
+const KSY_LIST_MIN_WIDTH = 120;
+/** 右側のエディタ欄に最低限残す幅（px） */
+const KSY_EDITOR_MIN_WIDTH = 320;
+(() => {
+    const layout = ksyModal.querySelector<HTMLDivElement>('.ksy-modal-layout')!;
+    const listPanel = layout.querySelector<HTMLDivElement>('.ksy-list-panel')!;
+    const handle = layout.querySelector<HTMLDivElement>('#ksy-list-resizer')!;
+    const applyWidth = (width: number | null) => {
+        if (width === null) {
+            layout.style.removeProperty('--ksy-list-width');
+        } else {
+            layout.style.setProperty('--ksy-list-width', `${width}px`);
+        }
+    };
+    try {
+        const saved = Number(localStorage.getItem(KSY_LIST_WIDTH_STORAGE_KEY));
+        if (saved > 0) applyWidth(saved);
+    } catch {
+        // 保存値が読めなければ既定の幅のまま
+    }
+    const saveWidth = (width: number | null) => {
+        try {
+            if (width === null) {
+                localStorage.removeItem(KSY_LIST_WIDTH_STORAGE_KEY);
+            } else {
+                localStorage.setItem(KSY_LIST_WIDTH_STORAGE_KEY, String(width));
+            }
+        } catch {
+            // 保存できなくても、このページを開いている間の幅変更は有効
+        }
+    };
+
+    handle.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        const startX = event.clientX;
+        const startWidth = listPanel.getBoundingClientRect().width;
+        const maxWidth = Math.max(KSY_LIST_MIN_WIDTH, layout.getBoundingClientRect().width - KSY_EDITOR_MIN_WIDTH);
+        let width = startWidth;
+        handle.setPointerCapture(event.pointerId);
+        handle.classList.add('active');
+        document.body.classList.add('column-resizing');
+        const onMove = (moveEvent: PointerEvent) => {
+            width = Math.round(Math.min(maxWidth, Math.max(KSY_LIST_MIN_WIDTH, startWidth + moveEvent.clientX - startX)));
+            applyWidth(width);
+        };
+        const onEnd = () => {
+            handle.removeEventListener('pointermove', onMove);
+            handle.removeEventListener('pointerup', onEnd);
+            handle.removeEventListener('pointercancel', onEnd);
+            handle.classList.remove('active');
+            document.body.classList.remove('column-resizing');
+            saveWidth(width);
+        };
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup', onEnd);
+        handle.addEventListener('pointercancel', onEnd);
+    });
+    handle.addEventListener('dblclick', () => {
+        applyWidth(null);
+        saveWidth(null);
+    });
+})();
 const NEW_KSY_TEMPLATE = `meta:
     id: new_format
     endian: le

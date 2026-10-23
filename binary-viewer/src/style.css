@@ -1109,9 +1109,23 @@ thead th {
 /* KSYモーダルレイアウト */
 .ksy-modal-layout {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 16px;
+  /* 保存済みスキーマ列 / 幅変更のつまみ / エディタ。列の幅は main.ts がドラッグで --ksy-list-width を変える */
+  grid-template-columns: var(--ksy-list-width, 180px) 8px minmax(0, 1fr);
+  column-gap: 4px;
+  row-gap: 16px;
   min-height: 400px;
+}
+
+/* 保存済みスキーマ列の幅変更のつまみ */
+.ksy-list-resizer {
+  border-radius: 3px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.ksy-list-resizer:hover,
+.ksy-list-resizer.active {
+  background-color: rgba(26, 115, 232, 0.35);
 }
 
 /*
