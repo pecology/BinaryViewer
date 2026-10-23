@@ -214,6 +214,16 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
                         <option value="le">Little Endian (le)</option>
                         <option value="be">Big Endian (be)</option>
                     </select>
+                    <label for="ksy-gui-encoding" style="font-weight: bold; font-size: 13px; margin-left: 12px;">文字コード（str・strz 型のみ）:</label>
+                    <select id="ksy-gui-encoding" style="padding: 4px;" title="str / strz の既定の文字コード（meta.encoding）">
+                        <option value="UTF-8">UTF-8</option>
+                        <option value="SJIS">Shift_JIS (SJIS)</option>
+                        <option value="ASCII">ASCII</option>
+                        <option value="EUC-JP">EUC-JP</option>
+                        <option value="UTF-16LE">UTF-16LE</option>
+                        <option value="UTF-16BE">UTF-16BE</option>
+                        <option value="ISO-8859-1">ISO-8859-1 (Latin-1)</option>
+                    </select>
                 </div>
                 <h4 style="margin: 0 0 8px 0; font-size: 13px; color: #333;">Fields (seq)</h4>
                 <div id="ksy-gui-fields" style="display: flex; flex-direction: column; gap: 8px;"></div>
@@ -2127,6 +2137,29 @@ const guiEditor = document.querySelector<HTMLDivElement>('#ksy-gui-editor');
 const guiFieldsContainer = document.querySelector<HTMLDivElement>('#ksy-gui-fields');
 const guiAddFieldBtn = document.querySelector<HTMLButtonElement>('#ksy-gui-add-field-btn');
 const guiEndianSelect = document.querySelector<HTMLSelectElement>('#ksy-gui-endian');
+const guiEncodingSelect = document.querySelector<HTMLSelectElement>('#ksy-gui-encoding');
+
+/**
+ * YAML の meta.encoding を、GUI の文字コード選択欄の値に合わせる
+ * 表記ゆれ（sjis / shift_jis など）は選択肢の値にそろえ、選択肢にない文字コードは選択肢を追加して残す
+ */
+function setGuiEncoding(encoding: string | undefined): void {
+    if (!guiEncodingSelect) return;
+    const aliases: Record<string, string> = {
+        'utf-8': 'UTF-8', 'utf8': 'UTF-8',
+        'sjis': 'SJIS', 'shift_jis': 'SJIS', 'shift-jis': 'SJIS', 'shiftjis': 'SJIS',
+        'ascii': 'ASCII',
+        'euc-jp': 'EUC-JP', 'eucjp': 'EUC-JP',
+        'utf-16le': 'UTF-16LE', 'utf-16be': 'UTF-16BE',
+        'iso-8859-1': 'ISO-8859-1', 'latin1': 'ISO-8859-1',
+    };
+    // meta.encoding がなければ、パーサーの既定（UTF-8）
+    const value = encoding ? aliases[encoding.toLowerCase()] ?? encoding : 'UTF-8';
+    if (![...guiEncodingSelect.options].some(option => option.value === value)) {
+        guiEncodingSelect.add(new Option(value, value));
+    }
+    guiEncodingSelect.value = value;
+}
 const ksySaveNameInput = document.querySelector<HTMLInputElement>('#ksy-save-name');
 const ksyTextArea = document.querySelector<HTMLTextAreaElement>('#ksyText');
 
@@ -2178,7 +2211,8 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                 if (guiEndianSelect && schema.meta.endian) {
                     guiEndianSelect.value = schema.meta.endian;
                 }
-                
+                setGuiEncoding(schema.meta.encoding);
+
                 // フィールドの同期
                 if (schema.seq && Array.isArray(schema.seq)) {
                     guiFieldsContainer!.innerHTML = '';
@@ -2218,7 +2252,11 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                         if (docInput && field.doc) {
                             docInput.value = field.doc;
                         }
-                        
+                        // フィールド個別の encoding は GUI に欄がないので、行に覚えておいて YAML へ戻すときにそのまま書き出す
+                        if (typeof field.encoding === 'string') {
+                            row.dataset.encoding = field.encoding;
+                        }
+
                         guiFieldsContainer!.appendChild(row);
                     });
                 }
@@ -2487,10 +2525,12 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
     (window as any).generateYamlFromGui = (silent: boolean = false): string | null => {
         const id = guiMetaId || ksySaveNameInput?.value.trim() || 'my_format';
         const endian = guiEndianSelect?.value || 'le';
+        const encoding = guiEncodingSelect?.value || 'UTF-8';
 
         let yaml = `meta:
   id: ${id}
-  endian: ${endian}`;
+  endian: ${endian}
+  encoding: ${encoding}`;
         yaml += `\nseq:\n`;
 
         const rows = Array.from(guiFieldsContainer.children);
@@ -2569,15 +2609,18 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                     }
                 } else {
                     yaml += `    size: ${fieldSize}\n`;
-                    if (fieldType === 'str') {
-                        yaml += `    encoding: UTF-8\n`;
+                    // 文字コードは meta.encoding（上部の選択欄）を使う。YAML でフィールド個別に指定されていた場合だけ書き戻す
+                    if (fieldType === 'str' && row.dataset.encoding) {
+                        yaml += `    encoding: ${row.dataset.encoding}\n`;
                     }
                 }
             } else if (fieldType === 'strz') {
                 if (fieldSize) {
                     yaml += `    size: ${fieldSize}\n`;
                 }
-                yaml += `    encoding: UTF-8\n`;
+                if (row.dataset.encoding) {
+                    yaml += `    encoding: ${row.dataset.encoding}\n`;
+                }
             }
         });
 
