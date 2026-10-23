@@ -21,6 +21,38 @@ export function splitSchemaName(name: string): string[] {
     return segments.length > 0 ? segments : [name];
 }
 
+/** スキーマ名のグループ部分（最後の区切りより前）。グループに属さない名前は null */
+export function getSchemaGroup(name: string): string | null {
+    const segments = splitSchemaName(name);
+    return segments.length > 1 ? segments.slice(0, -1).join(SCHEMA_NAME_SEPARATOR) : null;
+}
+
+/**
+ * KSY の type に書かれたスキーマ名を、保存済みスキーマのフルネームに解決する
+ * 自分のグループからの相対名（グループ名を省略した書き方）を優先し、なければフルネームとして扱う
+ * 例: "通信-機器A-コマンド" の中の "ヘッダ" → "通信-機器A-ヘッダ"（あれば）→ "ヘッダ"
+ * @param currentSchemaName 参照元のスキーマ名（不明なら相対名は使わない）
+ * @param exists その名前のスキーマが保存されているか
+ * @returns 解決したフルネーム。見つからなければ null
+ */
+export function resolveSchemaReference(currentSchemaName: string | undefined, typeName: string, exists: (name: string) => boolean): string | null {
+    const group = currentSchemaName ? getSchemaGroup(currentSchemaName) : null;
+    if (group) {
+        const relativeName = `${group}${SCHEMA_NAME_SEPARATOR}${typeName}`;
+        if (exists(relativeName)) return relativeName;
+    }
+    return exists(typeName) ? typeName : null;
+}
+
+/** 参照元と同じグループのスキーマなら、グループ名を省略した名前を返す（それ以外はフルネームのまま） */
+export function getRelativeSchemaName(currentSchemaName: string, targetName: string): string {
+    const group = getSchemaGroup(currentSchemaName);
+    const prefix = group ? `${group}${SCHEMA_NAME_SEPARATOR}` : null;
+    return prefix && targetName.startsWith(prefix) && targetName.length > prefix.length
+        ? targetName.slice(prefix.length)
+        : targetName;
+}
+
 /** スキーマ名の一覧から階層ツリーを作る（各階層は表示名順） */
 export function buildSchemaTree(names: string[]): SchemaTreeNode[] {
     const root: SchemaTreeNode[] = [];

@@ -5,7 +5,7 @@ import { saveKsy, loadKsy, deleteKsy, listKsyNames, hasKsy, exportAllKsy, import
 import { saveExtensionMapping, getParserForExtension, getExtensionFromFileName, getAllExtensionMappings, removeExtensionMapping, replaceParserInMappings, type ParserType } from './extensionMapping.ts'
 import { getBuiltinParsers, getBuiltinParser } from './parserRegistry.ts'
 import { setupColumnResizers, applyColumnLayout } from './columnResizer.ts'
-import { buildSchemaTree, walkSchemaTree, type SchemaTreeNode } from './schemaTree.ts'
+import { buildSchemaTree, walkSchemaTree, getRelativeSchemaName, resolveSchemaReference, type SchemaTreeNode } from './schemaTree.ts'
 import { attachTooltip } from './tooltip.ts'
 import type { BinaryRange } from './BinaryRange.ts'
 import type { DisplayRadix } from './BinaryInterpretType.ts'
@@ -497,12 +497,30 @@ function renameSchema(oldName: string, newName: string): boolean {
     const parserSelect = document.querySelector<HTMLSelectElement>('#parser-select')!;
     updateParserSelect(parserSelect.value === `ksy:${oldName}` ? `ksy:${newName}` : undefined);
 
-    // 他のスキーマが「type: 旧名」で参照している場合は、参照が切れることを知らせる（自動では書き換えない）
-    const escapedOldName = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const typeReference = new RegExp(`^\\s*(?:-\\s*)?type:\\s*["']?${escapedOldName}["']?\\s*$`, 'm');
-    const referencingNames = listKsyNames().filter(name => typeReference.test(loadKsy(name) ?? ''));
+    // 名前の変更で切れる型の参照を知らせる（自動では書き換えない）
+    // type はグループ名を省略した相対名でも書けるので、名前変更の前後でそれぞれ解決して比べる
+    const existsBefore = (name: string) => name === oldName || (name !== newName && hasKsy(name));
+    const typeValues = (content: string) =>
+        [...content.matchAll(/^\s*(?:-\s*)?type:\s*["']?([^"'\s#]+)["']?\s*$/gm)].map(match => match[1]);
+
+    // 1. 他のスキーマが、変更前の名前（フルネームまたは相対名）を型として参照している
+    const referencingNames = listKsyNames().filter(name => name !== newName && typeValues(loadKsy(name) ?? '')
+        .some(type => resolveSchemaReference(name, type, existsBefore) === oldName));
+    // 2. 変更したスキーマ自身が相対名で参照していた型が、グループが変わって別のもの（または見つからない）になった
+    const brokenOwnTypes = typeValues(loadKsy(newName) ?? '').filter(type => {
+        const before = resolveSchemaReference(oldName, type, existsBefore);
+        return before !== null && before !== resolveSchemaReference(newName, type, hasKsy);
+    });
+
+    const messages: string[] = [];
     if (referencingNames.length > 0) {
-        alert(`次のスキーマが "${oldName}" を型として参照しています。必要に応じて「type: ${newName}」に書き換えてください。\n\n${referencingNames.join('\n')}`);
+        messages.push(`次のスキーマが "${oldName}" を型として参照しています。必要に応じて型の名前を "${newName}" に合わせて書き換えてください。\n${referencingNames.join('\n')}`);
+    }
+    if (brokenOwnTypes.length > 0) {
+        messages.push(`"${newName}" の中の次の型は、グループが変わったため、変更前と同じスキーマを指さなくなりました。\n${[...new Set(brokenOwnTypes)].join('\n')}`);
+    }
+    if (messages.length > 0) {
+        alert(messages.join('\n\n'));
     }
     return true;
 }
@@ -1066,7 +1084,9 @@ document.querySelector<HTMLButtonElement>('#ksy-apply-btn')!.addEventListener('c
         clearError();
         try {
             const schema = parseKsySchema(content);
-            const result = parseBinary(editableData.buffer as ArrayBuffer, schema);
+            // 編集中のスキーマ名を渡し、type のグループ名を省略した参照も解決できるようにする
+            const editingName = document.querySelector<HTMLInputElement>('#ksy-save-name')!.value.trim() || undefined;
+            const result = parseBinary(editableData.buffer as ArrayBuffer, schema, editingName);
             if (result.warnings.length > 0) {
                 console.warn('Parse warnings:', result.warnings);
             }
@@ -1222,7 +1242,7 @@ function parseData(data: Uint8Array, parserType: ParserType): BinaryRange {
         }
         const schema = parseKsySchema(ksyContent);
         const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-        const result = parseBinary(buffer, schema);
+        const result = parseBinary(buffer, schema, ksyName);
         if (result.warnings.length > 0) {
             console.warn('Parse warnings:', result.warnings);
         }
@@ -2277,7 +2297,6 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                 dataList.id = 'type-options';
                 document.body.appendChild(dataList);
             }
-            const customSchemas = listKsyNames();
             dataList.innerHTML = `
                 <option value="u1">符号なし1byte</option>
                 <option value="u2">符号なし2byte</option>
@@ -2288,8 +2307,21 @@ if (tabRaw && tabGui && rawEditor && guiEditor && guiFieldsContainer && guiAddFi
                 <option value="str">文字列</option>
                 <option value="strz">NULL終端文字列</option>
                 <option value="bytes">バイト配列</option>
-                ${customSchemas.map(name => `<option value="${name}">保存済みスキーマ</option>`).join('')}
             `;
+            // 保存済みスキーマ: 編集中のスキーマと同じグループのものはグループ名を省略した名前で候補に出す
+            // （自分自身を型にすると無限に再帰するので候補から外す）
+            const editingName = ksySaveNameInput?.value.trim() ?? '';
+            const candidates = listKsyNames()
+                .filter(name => name !== editingName)
+                .map(name => ({ name, value: editingName ? getRelativeSchemaName(editingName, name) : name }));
+            // 同じグループのスキーマと同じ名前になるフルネームのスキーマは、相対名が優先されてこのスキーマからは参照できないので出さない
+            const relativeValues = new Set(candidates.filter(c => c.value !== c.name).map(c => c.value));
+            candidates
+                .filter(c => c.value !== c.name || !relativeValues.has(c.value))
+                .forEach(({ name, value }) => {
+                    const label = value === name ? '保存済みスキーマ' : `保存済みスキーマ（${name}）`;
+                    dataList!.append(new Option(label, value));
+                });
 
             guiBaselineYaml = (window as any).generateYamlFromGui(true);
         } catch (e) {

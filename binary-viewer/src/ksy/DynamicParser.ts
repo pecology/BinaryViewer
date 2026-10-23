@@ -4,7 +4,8 @@
  */
 
 import { BinaryRange } from '../BinaryRange';
-import { loadKsy } from '../ksyStorage';
+import { loadKsy, hasKsy } from '../ksyStorage';
+import { resolveSchemaReference } from '../schemaTree';
 import type { BinaryInterpretType, InterpretOptions } from '../BinaryInterpretType';
 import { BytesHexEncoding, formatInteger } from '../BinaryInterpretType';
 import type {
@@ -71,6 +72,11 @@ interface ParseContext {
     warnings: string[];
     /** 元のArrayBuffer */
     buffer: ArrayBuffer;
+    /**
+     * パース中のスキーマの保存名（type に書いた保存済みスキーマ名を、このスキーマのグループからの相対名で解決するのに使う）
+     * 外部スキーマをパースしている間は、そのスキーマの名前になる
+     */
+    schemaName?: string;
 }
 
 /**
@@ -284,7 +290,10 @@ function convertToKsyType(obj: YamlObject): KsyType {
 /**
  * バイナリデータをKsyスキーマに基づいてパース
  */
-export function parseBinary(data: ArrayBuffer, schema: KsySchema): ParseResult {
+/**
+ * @param schemaName スキーマの保存名。指定すると、type に書いた保存済みスキーマ名をこのスキーマのグループからの相対名でも解決する
+ */
+export function parseBinary(data: ArrayBuffer, schema: KsySchema, schemaName?: string): ParseResult {
     const dataView = new DataView(data);
     const context: ParseContext = {
         dataView,
@@ -295,6 +304,7 @@ export function parseBinary(data: ArrayBuffer, schema: KsySchema): ParseResult {
         values: {},
         warnings: [],
         buffer: data,
+        schemaName,
     };
 
     const rootRanges: BinaryRange[] = [];
@@ -443,20 +453,24 @@ function parseSingleField(
         return parseUserType(context, userType, displayName);
     }
 
-    // 外部スキーマを試す
-    const externalKsyText = loadKsy(typeName);
-    if (externalKsyText) {
+    // 外部スキーマ（保存済みスキーマ）を試す。自分のグループからの相対名を優先し、なければフルネームとして探す
+    const externalName = resolveSchemaReference(context.schemaName, typeName, hasKsy);
+    const externalKsyText = externalName ? loadKsy(externalName) : null;
+    if (externalName && externalKsyText) {
         try {
             const externalSchema = parseKsySchema(externalKsyText);
             
             // 外部スキーマのコンテキストを一時的に設定
             const originalEndian = context.defaultEndian;
             const originalSchema = context.schema;
+            const originalSchemaName = context.schemaName;
             
             if (externalSchema.meta && externalSchema.meta.endian) {
                 context.defaultEndian = externalSchema.meta.endian;
             }
             context.schema = externalSchema;
+            // 外部スキーマの中の相対名は、外部スキーマ自身のグループを基準にする
+            context.schemaName = externalName;
             
             // externalSchema は seq を持つため、KsyType と互換がある
             const result = parseUserType(context, externalSchema as unknown as KsyType, displayName);
@@ -464,10 +478,11 @@ function parseSingleField(
             // コンテキストを元に戻す
             context.defaultEndian = originalEndian;
             context.schema = originalSchema;
+            context.schemaName = originalSchemaName;
             
             return result;
         } catch (e) {
-            throw new Error(`Failed to parse external schema "${typeName}": ${e instanceof Error ? e.message : String(e)}`);
+            throw new Error(`Failed to parse external schema "${externalName}": ${e instanceof Error ? e.message : String(e)}`);
         }
     }
 
