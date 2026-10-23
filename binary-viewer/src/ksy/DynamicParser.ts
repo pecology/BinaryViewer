@@ -349,6 +349,7 @@ function parseField(context: ParseContext, field: KsyField & { if?: string }): B
         const count = resolveExpr(context, repeatExpr);
         const ranges: BinaryRange[] = [];
         const arrayValues: unknown[] = [];
+        const startOffset = context.offset;
 
         for (let i = 0; i < count; i++) {
             const [range, value] = parseSingleField(context, field, `${field.id}[${i}]`);
@@ -357,7 +358,13 @@ function parseField(context: ParseContext, field: KsyField & { if?: string }): B
         }
 
         context.values[field.id] = arrayValues;
-        return field.consume === false ? [] : ranges;
+        if (field.consume === false) return [];
+
+        // 要素をまとめる配列ノード（構造ビューで「表で表示」の対象になる）
+        const arrayData = new Uint8Array(context.buffer, startOffset, context.offset - startOffset);
+        const arrayRange = new BinaryRange(arrayData, field.id, null, ranges, field.doc);
+        arrayRange.isArray = true;
+        return [arrayRange];
     }
 
     // 単一フィールド

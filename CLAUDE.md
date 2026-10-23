@@ -31,6 +31,7 @@ npm run build    # tsc による型チェック + vite build（dist/index.html �
 - `src/columnResizer.ts` — 各列の幅をドラッグで変更する（`data-column` 属性のパネルが対象。幅は localStorage に保存）
 - `src/schemaTree.ts` — スキーマ名を「-」で区切った階層ツリー（パーサー選択とパーサー管理の一覧で使う）
 - `src/tooltip.ts` — 独自ツールチップ（標準の title より早く出す。構造ツリーと Hex テーブルの説明表示に使う）
+- `src/arrayTable.ts` — 配列（`BinaryRange.isArray`）を表形式で見るモーダル。見えている行だけ描画する
 - `src/main.ts` — UI 全体（約2300行）。`#app` に HTML テンプレートを innerHTML で流し込み、モジュールスコープの変数で状態を持つ。ファイル読込、Hexテーブル（ページング）、構造ツリー（`<details>` アコーディオン）、Hex編集→再パース、KSY管理モーダル、ダンプログ表示（仮想スクロール）を含む
 
 処理の流れ: ファイル読込 → パーサー決定（組み込み / KSY / 拡張子紐付け）→ `BinaryRange` ツリー生成 → Hexテーブルと構造ツリーを描画 → 双方向ハイライト

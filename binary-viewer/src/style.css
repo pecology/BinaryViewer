@@ -438,6 +438,116 @@ body.column-resizing {
   display: none;
 }
 
+/* 配列ノードの「表で表示」ボタン（arrayTable.ts） */
+.array-table-btn {
+  margin-left: 8px;
+  padding: 0 6px;
+  border: 1px solid #1a73e8;
+  border-radius: 3px;
+  background: #fff;
+  color: #1a73e8;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.array-table-btn:hover {
+  background: #e8f0fe;
+}
+
+.array-table-empty {
+  margin-left: 6px;
+  color: #999;
+  font-size: 11px;
+}
+
+/* 配列の表形式表示のモーダル（arrayTable.ts） */
+.array-table-modal .array-table-content {
+  width: min(92vw, 1100px);
+  height: 80vh;
+}
+
+.array-table-hint {
+  padding: 6px 16px;
+  border-bottom: 1px solid #eee;
+  color: #666;
+  font-size: 12px;
+}
+
+.array-table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 16px 16px;
+  outline: none;
+}
+
+.array-table {
+  min-width: 100%;
+  border-collapse: collapse;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.array-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 4px 10px;
+  border: 1px solid #ddd;
+  background: #f5f5f5;
+  /* 全体の thead th（Hex テーブル用の緑・白文字）を上書きする */
+  color: #333;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.array-table th small {
+  display: block;
+  color: #888;
+  font-weight: normal;
+}
+
+/* 行の高さは arrayTable.ts の ROW_HEIGHT と合わせる（見えている行だけ描画するため） */
+.array-table tbody tr {
+  height: 26px;
+  cursor: pointer;
+}
+
+.array-table td {
+  padding: 0 10px;
+  border: 1px solid #eee;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.array-table tbody tr:hover td {
+  background: #f5f5f5;
+}
+
+.array-table tbody tr.selected td {
+  background: #e3f2fd;
+}
+
+.array-table .array-table-index,
+.array-table .array-table-nested {
+  color: #999;
+}
+
+.array-table .array-table-offset {
+  color: #666;
+}
+
+.array-table tbody tr.array-table-spacer {
+  height: auto;
+  cursor: default;
+}
+
+.array-table tr.array-table-spacer td {
+  padding: 0;
+  border: none;
+}
+
 /* 独自ツールチップ（tooltip.ts） */
 .app-tooltip {
   position: fixed;

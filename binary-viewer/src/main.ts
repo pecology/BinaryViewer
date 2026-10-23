@@ -7,6 +7,7 @@ import { getBuiltinParsers, getBuiltinParser } from './parserRegistry.ts'
 import { setupColumnResizers, applyColumnLayout } from './columnResizer.ts'
 import { buildSchemaTree, walkSchemaTree, getRelativeSchemaName, resolveSchemaReference, type SchemaTreeNode } from './schemaTree.ts'
 import { attachTooltip } from './tooltip.ts'
+import { openArrayTable } from './arrayTable.ts'
 import type { BinaryRange } from './BinaryRange.ts'
 import type { DisplayRadix } from './BinaryInterpretType.ts'
 
@@ -1691,6 +1692,69 @@ function displayParseResult(parseResult: BinaryRange): void {
     });
 }
 
+/**
+ * 指定した範囲を選択状態にする（Hex の該当ページへ移動し、Hex と構造ツリーをハイライトして Hex をスクロール）
+ */
+function selectRangeInViews(offset: number, length: number): void {
+    if (!currentParseResult) return;
+
+    const nowPagingIndex = parseInt((document.querySelector("#paging-index-input") as HTMLInputElement).value);
+    const clickedElementIndex = Math.floor(offset / bytesPerPage);
+    if (nowPagingIndex !== clickedElementIndex)
+    {
+        document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(currentParseResult, clickedElementIndex);
+        document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${clickedElementIndex * bytesPerPage} ~ ${(clickedElementIndex + 1) * bytesPerPage - 1}byte)`
+        document.querySelector<HTMLInputElement>('#paging-index-input')!.value = clickedElementIndex.toString();
+    }
+
+    // ハイライト対象のRangeを取得
+    const highlightRangeList: BinaryRange[] = getRangeContainsList(currentParseResult, offset, length);
+    highlightRangeList.shift(); // 最初の要素は全体なので削除
+
+    // 色付け処理
+    [...document.querySelectorAll<HTMLTableCellElement>('#hex-table td'),
+    ...document.querySelectorAll<HTMLElement>('.details-wrapper details')
+    ].forEach(e => highlight(e, highlightRangeList));
+
+    // 選択した構造に対応する箇所に、テーブルのスクロールを合わせる
+    [...document.querySelectorAll<HTMLTableCellElement>('#hex-table td')]
+        .find(td => parseInt(td.dataset.offset!) === offset)?.scrollIntoView(
+            {
+                behavior: 'smooth', 
+                block: 'center'
+            }
+        );
+}
+
+/** 構造ツリーの details 要素に対応する BinaryRange を探す（範囲と名前が一致する一番内側のもの） */
+function findRangeOfDetails(details: HTMLElement | null): BinaryRange | undefined {
+    if (!details || !currentParseResult) return undefined;
+    const offset = parseInt(details.dataset.offset!);
+    const length = parseInt(details.dataset.length!);
+    const name = decodeURIComponent(details.dataset.name ?? '');
+    return getRangeContainsList(currentParseResult, offset, length)
+        .filter(range => range.name === name && range.data.byteOffset === offset && range.data.byteLength === length)
+        .pop();
+}
+
+/** 範囲を構造ツリーで開いてフォーカスし、Hex と構造ツリーで選択状態にする（表のモーダルからの移動に使う） */
+function revealRangeInStructure(range: BinaryRange): void {
+    const offset = range.data.byteOffset;
+    const length = range.data.byteLength;
+    const details = [...document.querySelectorAll<HTMLDetailsElement>(`.details-wrapper details[data-offset="${offset}"][data-length="${length}"]`)]
+        .filter(d => d.dataset.name === encodeURIComponent(range.name))
+        .pop();
+    if (details) {
+        for (let element: HTMLElement | null = details; element; element = element.parentElement) {
+            if (element instanceof HTMLDetailsElement) element.open = true;
+        }
+        const summary = details.querySelector<HTMLElement>(':scope > summary');
+        summary?.focus();
+        summary?.scrollIntoView({ block: 'center' });
+    }
+    selectRangeInViews(offset, length);
+}
+
 /** 構造ツリーで、スクロールしても上に固定表示する親の段数 */
 const STICKY_SUMMARY_LEVELS = 4;
 let stickySummaryTimer: number | null = null;
@@ -1736,6 +1800,17 @@ function setupStructureEventListeners(): void {
     new ResizeObserver(scheduleStickySummaryOffsets).observe(structureWrapper);
 
     structureWrapper.addEventListener('click', (e) => {
+        // 配列の「表で表示」ボタン: details の開閉はせず、表のモーダルを開く
+        const tableButton = (e.target as HTMLElement).closest<HTMLButtonElement>('.array-table-btn');
+        if (tableButton) {
+            e.preventDefault();
+            const array = findRangeOfDetails(tableButton.closest<HTMLElement>('details[data-offset]'));
+            if (array?.isArray) {
+                openArrayTable(array, { radix: valueRadix, onJump: revealRangeInStructure });
+            }
+            return;
+        }
+
         if ((e.target as HTMLElement).classList.contains("cancel-toggle")) {
             // detailsの開閉の動作をキャンセルしたい
             e.preventDefault();
@@ -1743,37 +1818,8 @@ function setupStructureEventListeners(): void {
 
         // クリックしたRangeに対応するTableの方の色付けをしたい
         const detailsElement = (e.target as HTMLElement).closest<HTMLElement>('[data-offset]');
-        if (!detailsElement || !currentParseResult) return;
-
-        const offset = parseInt(detailsElement.dataset.offset!);
-        const length = parseInt(detailsElement.dataset.length!);
-
-        const nowPagingIndex = parseInt((document.querySelector("#paging-index-input") as HTMLInputElement).value);
-        const clickedElementIndex = Math.floor(offset / bytesPerPage);
-        if (nowPagingIndex !== clickedElementIndex)
-        {
-            document.querySelector<HTMLDivElement>('#hex-table')!.innerHTML = toHexTableHtmlString(currentParseResult, clickedElementIndex);
-            document.querySelector<HTMLDivElement>('#display-range-text')!.innerHTML = `(${clickedElementIndex * bytesPerPage} ~ ${(clickedElementIndex + 1) * bytesPerPage - 1}byte)`
-            document.querySelector<HTMLInputElement>('#paging-index-input')!.value = clickedElementIndex.toString();
-        }
-
-        // ハイライト対象のRangeを取得
-        const highlightRangeList: BinaryRange[] = getRangeContainsList(currentParseResult, offset, length);
-        highlightRangeList.shift(); // 最初の要素は全体なので削除
-
-        // 色付け処理
-        [...document.querySelectorAll<HTMLTableCellElement>('#hex-table td'),
-        ...document.querySelectorAll<HTMLElement>('.details-wrapper details')
-        ].forEach(e => highlight(e, highlightRangeList));
-
-        // クリックした構造に対応する箇所に、テーブルのスクロールを合わせる
-        [...document.querySelectorAll<HTMLTableCellElement>('#hex-table td')]
-            .find(td => parseInt(td.dataset.offset!) === offset)?.scrollIntoView(
-                {
-                    behavior: 'smooth', 
-                    block: 'center'
-                }
-            );
+        if (!detailsElement) return;
+        selectRangeInViews(parseInt(detailsElement.dataset.offset!), parseInt(detailsElement.dataset.length!));
     });
 
     structureWrapper.addEventListener('keydown', (e) => {
@@ -2129,9 +2175,13 @@ const toHexTableHtmlString = (hexRange: BinaryRange, pageIndex: number = 0): str
 const toStructureHtmlString = (segment: BinaryRange): string => {
     // 説明は <summary> の中に置き、折りたたんでいても見えるようにする（表示/非表示は CSS のクラスで切り替える）
     const docHtml = segment.doc ? `<span class="structure-doc">${escapeHtml(segment.doc)}</span>` : '';
+    const arrayHtml = !segment.isArray ? ''
+        : segment.subRanges.length > 0
+            ? `<button type="button" class="array-table-btn" title="この配列を表形式で表示">▦ 表で表示（${segment.subRanges.length}件）</button>`
+            : '<span class="array-table-empty">（0件）</span>';
     return `
 <details data-name="${encodeURIComponent(segment.name)}" data-offset="${segment.data.byteOffset}" data-length="${segment.data.byteLength}" data-highlight="0">
-  <summary><span class="cancel-toggle"> ${escapeHtml(segment.name)} (${rangeToString(segment)})</span>${docHtml}</summary>
+  <summary><span class="cancel-toggle"> ${escapeHtml(segment.name)} (${rangeToString(segment)})</span>${arrayHtml}${docHtml}</summary>
     ${escapeHtml(segment.interpret({ radix: valueRadix }))}
     ${segment.subRanges.reduce((acc, child) => acc + toStructureHtmlString(child), "")}
 </details>

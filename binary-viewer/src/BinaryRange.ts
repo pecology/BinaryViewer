@@ -6,6 +6,8 @@ export class BinaryRange {
     binaryInterpretType: BinaryInterpretType | null;
     subRanges: BinaryRange[];
     doc?: string;
+    /** 繰り返し（配列）フィールドのまとまりか。true のとき subRanges が各要素（構造ビューで表形式表示できる） */
+    isArray?: boolean;
 
     constructor(data: Uint8Array, name: string, binaryInterpretType: BinaryInterpretType | null, subRanges: BinaryRange[] = [], doc?: string) {
         this.data = data;
